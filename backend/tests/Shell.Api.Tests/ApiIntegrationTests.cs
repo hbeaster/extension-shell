@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
-using Extensions.Api.Controllers;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Shell.Api.Controllers;
 
-namespace Extensions.Api.Tests;
+namespace Shell.Api.Tests;
 
 public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -24,7 +24,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<HelloResponse>();
         Assert.NotNull(body);
-        Assert.Equal("Hello from Extensions.Api", body.Message);
+        Assert.Equal("Hello from Shell.Api", body.Message);
     }
 
     [Fact]

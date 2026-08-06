@@ -1,6 +1,0 @@
-apiVersion: v2
-name: extensions
-description: Helm chart for the Extensions web application (ASP.NET Core serving the Vue SPA and API from a single container)
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

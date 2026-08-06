@@ -1,6 +1,6 @@
-using Extensions.Api.Controllers;
+using Shell.Api.Controllers;
 
-namespace Extensions.Api.Tests;
+namespace Shell.Api.Tests;
 
 public class HelloControllerTests
 {
@@ -11,7 +11,7 @@ public class HelloControllerTests
 
         var response = controller.Get();
 
-        Assert.Equal("Hello from Extensions.Api", response.Message);
+        Assert.Equal("Hello from Shell.Api", response.Message);
         Assert.Equal(DateTimeKind.Utc, response.ServerTimeUtc.Kind);
     }
 }

@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "extensions.fullname" . }}
+  name: {{ include "shell.fullname" . }}
   labels:
-    {{- include "extensions.labels" . | nindent 4 }}
+    {{- include "shell.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "extensions.selectorLabels" . | nindent 6 }}
+      {{- include "shell.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -16,7 +16,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "extensions.selectorLabels" . | nindent 8 }}
+        {{- include "shell.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

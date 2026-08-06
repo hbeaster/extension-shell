@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "extensions.name" -}}
+{{- define "shell.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "extensions.fullname" -}}
+{{- define "shell.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Chart name and version label.
 */}}
-{{- define "extensions.chart" -}}
+{{- define "shell.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels.
 */}}
-{{- define "extensions.labels" -}}
-helm.sh/chart: {{ include "extensions.chart" . }}
-{{ include "extensions.selectorLabels" . }}
+{{- define "shell.labels" -}}
+helm.sh/chart: {{ include "shell.chart" . }}
+{{ include "shell.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,7 +43,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels.
 */}}
-{{- define "extensions.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "extensions.name" . }}
+{{- define "shell.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "shell.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

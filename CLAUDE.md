@@ -1,4 +1,4 @@
-# Extensions — AI assistant guide
+# Shell — AI assistant guide
 
 Single-service web app: Vue 3 SPA + ASP.NET Core (.NET 10) API, served together from one container in production.
 
@@ -7,8 +7,8 @@ Single-service web app: Vue 3 SPA + ASP.NET Core (.NET 10) API, served together 
 | Path | What it is |
 | --- | --- |
 | `frontend/` | Vue 3 + Vite + TypeScript SPA (create-vue layout: `src/views`, `src/components`, `src/router`, `src/stores`, `src/services`) |
-| `backend/` | .NET solution — API in `src/Extensions.Api` (controllers), tests in `tests/Extensions.Api.Tests` (xUnit) |
-| `helm/extensions/` | Helm chart: Deployment, Service, optional Ingress |
+| `backend/` | .NET solution — API in `src/Shell.Api` (controllers), tests in `tests/Shell.Api.Tests` (xUnit) |
+| `helm/shell/` | Helm chart: Deployment, Service, optional Ingress |
 | `docs/adr/` | Architecture Decision Records (numbered, MADR-style) |
 | `docs/architecture/` | Numbered architecture snapshots with mermaid diagrams |
 | `plans/` | Working plans for larger efforts |
@@ -25,18 +25,18 @@ Frontend (run in `frontend/`):
 
 Backend (run in `backend/`):
 
-- `dotnet run --project src/Extensions.Api` — API on `http://localhost:5000`
+- `dotnet run --project src/Shell.Api` — API on `http://localhost:5000`
 - `dotnet test` — xUnit suites
 - `dotnet format --verify-no-changes` — style gate (analyzers at `latest-recommended`)
 
 Full stack:
 
-- `docker build -t extensions .` (repo root) then `docker run -p 8080:8080 extensions`
-- `helm lint helm/extensions` / `helm template helm/extensions`
+- `docker build -t shell .` (repo root) then `docker run -p 8080:8080 shell`
+- `helm lint helm/shell` / `helm template helm/shell`
 
 ## Conventions
 
-- API endpoints: attribute-routed controllers under `/api/*`, one controller per resource, in `backend/src/Extensions.Api/Controllers/`.
+- API endpoints: attribute-routed controllers under `/api/*`, one controller per resource, in `backend/src/Shell.Api/Controllers/`.
 - Frontend API calls go through `frontend/src/services/api.ts` — add typed functions there, never `fetch` directly in components.
 - Health endpoint is `/healthz` (used by k8s probes) — don't rename without updating the Helm values.
 - Significant technical decisions get a new ADR in `docs/adr/` (next number, MADR format: Context / Decision / Consequences).

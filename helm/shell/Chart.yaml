@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shell
+description: Helm chart for the Shell web application (ASP.NET Core serving the Vue SPA and API from a single container)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

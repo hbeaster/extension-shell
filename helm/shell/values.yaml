@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: extensions
+  repository: shell
   tag: ""            # defaults to Chart.appVersion
   pullPolicy: IfNotPresent
 
@@ -18,14 +18,14 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
-  host: extensions.local
+  host: shell.local
   path: /
   pathType: Prefix
   tls: []
   # tls:
-  #   - secretName: extensions-tls
+  #   - secretName: shell-tls
   #     hosts:
-  #       - extensions.local
+  #       - shell.local
 
 resources:
   requests:

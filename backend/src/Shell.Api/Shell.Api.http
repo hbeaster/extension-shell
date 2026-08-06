@@ -1,0 +1,6 @@
+@Shell.Api_HostAddress = http://localhost:5253
+
+GET {{Shell.Api_HostAddress}}/api/hello
+Accept: application/json
+
+###

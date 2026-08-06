@@ -1,4 +1,4 @@
-# Extensions
+# Shell
 
 A web application: Vue 3 + Vite + TypeScript frontend, ASP.NET Core (.NET 10) backend with controller-based APIs. In production a single container serves both the SPA and the API; Kubernetes deployment via Helm.
 
@@ -15,7 +15,7 @@ Terminal 1 — backend:
 
 ```bash
 cd backend
-dotnet run --project src/Extensions.Api
+dotnet run --project src/Shell.Api
 ```
 
 Terminal 2 — frontend (Vite proxies `/api` to the backend):
@@ -46,8 +46,8 @@ dotnet format --verify-no-changes
 ## Docker
 
 ```bash
-docker build -t extensions .
-docker run -p 8080:8080 extensions
+docker build -t shell .
+docker run -p 8080:8080 shell
 # http://localhost:8080  (SPA), /api/hello, /healthz
 ```
 
@@ -56,11 +56,11 @@ docker run -p 8080:8080 extensions
 ## Kubernetes (Helm)
 
 ```bash
-helm lint helm/extensions
-helm install extensions helm/extensions --set image.repository=<your-registry>/extensions --set image.tag=<tag>
+helm lint helm/shell
+helm install shell helm/shell --set image.repository=<your-registry>/shell --set image.tag=<tag>
 ```
 
-See `helm/extensions/values.yaml` for replicas, resources, ingress, and probe settings.
+See `helm/shell/values.yaml` for replicas, resources, ingress, and probe settings.
 
 ## Documentation
 

@@ -10,7 +10,7 @@ RUN npm run build-only
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend-build
 WORKDIR /src
 COPY backend/ ./
-RUN dotnet publish src/Extensions.Api -c Release -o /app/publish
+RUN dotnet publish src/Shell.Api -c Release -o /app/publish
 
 # Final: runtime image with SPA assets in wwwroot
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -20,4 +20,4 @@ COPY --from=frontend-build /src/dist ./wwwroot
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 USER app
-ENTRYPOINT ["dotnet", "Extensions.Api.dll"]
+ENTRYPOINT ["dotnet", "Shell.Api.dll"]
