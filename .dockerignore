@@ -8,6 +8,12 @@ frontend/dist/
 frontend/coverage/
 frontend/.eslintcache
 
+# Extensions
+extensions/node_modules/
+extensions/*/node_modules/
+extensions/dist/
+extensions/*/dist/
+
 # Backend build output
 backend/**/bin/
 backend/**/obj/

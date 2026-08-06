@@ -1,6 +1,11 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AppSidebar from './components/AppSidebar.vue'
+import { useExtensionsStore } from './stores/extensions'
+
+const extensionsStore = useExtensionsStore()
+onMounted(() => extensionsStore.load())
 </script>
 
 <template>

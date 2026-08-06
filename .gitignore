@@ -2,6 +2,8 @@
 node_modules/
 frontend/dist/
 frontend/coverage/
+extensions/dist/
+extensions/*/dist/
 *.local
 .eslintcache
 

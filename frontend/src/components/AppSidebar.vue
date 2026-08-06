@@ -5,6 +5,9 @@ import IconDocumentation from './icons/IconDocumentation.vue'
 import IconTooling from './icons/IconTooling.vue'
 import IconCommunity from './icons/IconCommunity.vue'
 import IconSupport from './icons/IconSupport.vue'
+import { useExtensionsStore } from '@/stores/extensions'
+
+const extensionsStore = useExtensionsStore()
 
 interface Tool {
   to: string
@@ -31,6 +34,15 @@ const tools: Tool[] = [
       <RouterLink v-for="tool in tools" :key="tool.to" :to="tool.to" class="tool-link">
         <component :is="tool.icon" class="icon" />
         <span class="label">{{ tool.label }}</span>
+      </RouterLink>
+      <RouterLink
+        v-for="ext in extensionsStore.extensions"
+        :key="ext.id"
+        :to="`/ext/${ext.id}`"
+        class="tool-link"
+      >
+        <img :src="ext.icon" class="icon" alt="" />
+        <span class="label">{{ ext.name }}</span>
       </RouterLink>
     </nav>
   </aside>

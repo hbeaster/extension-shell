@@ -31,6 +31,13 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
     {
+      // Generic host for installed extensions; unknown ids are handled
+      // inside the view rather than by the catch-all redirect.
+      path: '/ext/:id',
+      name: 'extension',
+      component: () => import('../views/ExtensionHostView.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/tools/dashboard',
     },

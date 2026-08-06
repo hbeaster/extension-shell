@@ -1,0 +1,22 @@
+# Layers built extensions onto the shell image.
+# Build the shell image first, then:
+#   docker build -f Dockerfile.extensions -t shell-ext .
+# Override the base with --build-arg SHELL_IMAGE=<image:tag> if needed.
+ARG SHELL_IMAGE=shell:latest
+
+# Stage 1: build all extensions and assemble the registry
+FROM node:24-alpine AS extensions-build
+WORKDIR /src
+COPY extensions/package.json extensions/package-lock.json ./
+COPY extensions/smiley-face/package.json ./smiley-face/
+COPY extensions/buzzer/package.json ./buzzer/
+RUN npm ci
+COPY extensions/ ./
+RUN npm run build
+
+# Final: shell image plus extension static assets.
+# COPY runs as root even though the base image ends with USER app; the files
+# land root-owned and world-readable (644/755), which is correct for
+# read-only static assets served to the app user.
+FROM ${SHELL_IMAGE} AS final
+COPY --from=extensions-build /src/dist /app/wwwroot/extensions

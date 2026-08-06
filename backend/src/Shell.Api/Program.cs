@@ -1,3 +1,5 @@
+using Microsoft.Extensions.FileProviders;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
@@ -15,6 +17,22 @@ if (app.Environment.IsDevelopment())
 // so no UseHttpsRedirection here.
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+// Extensions live in wwwroot/extensions in the container image. For local dev
+// (no wwwroot), Extensions:RootPath points at the extensions workspace dist.
+var extensionsRoot = app.Configuration["Extensions:RootPath"];
+if (!string.IsNullOrWhiteSpace(extensionsRoot))
+{
+    var fullPath = Path.GetFullPath(extensionsRoot, app.Environment.ContentRootPath);
+    if (Directory.Exists(fullPath))
+    {
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(fullPath),
+            RequestPath = "/extensions",
+        });
+    }
+}
 
 app.UseAuthorization();
 
