@@ -1,0 +1,22 @@
+# VCS
+.git/
+.gitignore
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.eslintcache
+
+# Backend build output
+backend/**/bin/
+backend/**/obj/
+
+# Docs & tooling
+docs/
+plans/
+helm/
+*.md
+.editorconfig
+.vs/
+.idea/
