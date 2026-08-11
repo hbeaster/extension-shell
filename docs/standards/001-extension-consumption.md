@@ -145,6 +145,13 @@ The requirements above are implemented and tested here:
 - Presentation: `frontend/src/components/AppSidebar.vue`, `frontend/src/router/index.ts`.
 - Lifecycle: `frontend/src/views/ExtensionHostView.vue`; behavior specified in
   `frontend/src/views/__tests__/ExtensionHostView.spec.ts`.
+- Context attributes: `frontend/src/stores/shellContext.ts` (the shell's theme and
+  locale, with `system` resolved to a concrete value before it reaches an extension),
+  `frontend/src/views/ExtensionHostView.vue` (`applyContext`, set before insertion and
+  updated by a watcher separate from the mount watcher so a change never remounts),
+  `frontend/src/components/AppSidebar.vue` (the theme control, reachable from an
+  extension route); behavior specified in
+  `frontend/src/stores/__tests__/shellContext.spec.ts` and the host-view tests.
 - Deployment: `Dockerfile.extensions`; runtime flow diagrams in
   [architecture snapshot 002](../architecture/002-extension-system.md); build and
   packaging flow in

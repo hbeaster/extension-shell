@@ -4,6 +4,7 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AppSidebar from '../AppSidebar.vue'
 import { useExtensionsStore } from '@/stores/extensions'
+import { useShellContextStore } from '@/stores/shellContext'
 
 describe('AppSidebar', () => {
   let pinia: ReturnType<typeof createPinia>
@@ -35,7 +36,7 @@ describe('AppSidebar', () => {
 
   it('renders the tool labels', () => {
     const wrapper = mountSidebar()
-    const labels = wrapper.findAll('.label').map((label) => label.text())
+    const labels = wrapper.findAll('.tool-nav .label').map((label) => label.text())
     expect(labels).toEqual(['Dashboard', 'Data', 'Reports', 'Settings'])
   })
 
@@ -69,7 +70,23 @@ describe('AppSidebar', () => {
       '/extensions/smiley-face/icon.svg',
       '/extensions/buzzer/icon.svg',
     ])
-    const labels = wrapper.findAll('.label').map((label) => label.text())
+    const labels = wrapper.findAll('.tool-nav .label').map((label) => label.text())
     expect(labels).toEqual(['Dashboard', 'Data', 'Reports', 'Settings', 'Smiley Face', 'Buzzer'])
+  })
+
+  it('toggles the shell theme, which is what reaches mounted extensions', async () => {
+    const shellContext = useShellContextStore()
+    const wrapper = mountSidebar()
+    const toggle = wrapper.find('[data-testid="theme-toggle"]')
+
+    expect(shellContext.theme).toBe('light')
+    expect(toggle.attributes('aria-label')).toBe('Switch to dark theme')
+
+    await toggle.trigger('click')
+    expect(shellContext.theme).toBe('dark')
+    expect(toggle.attributes('aria-label')).toBe('Switch to light theme')
+
+    await toggle.trigger('click')
+    expect(shellContext.theme).toBe('light')
   })
 })

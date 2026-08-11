@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useShellContextStore } from '@/stores/shellContext'
+
+// Theme is real shell state: it restyles the shell and reaches every mounted
+// extension as the shell-theme attribute. The other fields are still scaffold.
+const shellContext = useShellContextStore()
 
 const displayName = ref('Jane Doe')
-const theme = ref('system')
 const emailNotifications = ref(true)
 const weeklyDigest = ref(false)
 </script>
@@ -18,7 +22,7 @@ const weeklyDigest = ref(false)
 
       <div class="field">
         <label for="theme">Theme</label>
-        <select id="theme" v-model="theme">
+        <select id="theme" v-model="shellContext.preference">
           <option value="system">System</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>

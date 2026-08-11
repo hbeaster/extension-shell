@@ -5,8 +5,22 @@ import { createPinia, setActivePinia } from 'pinia'
 import ExtensionHostView from '../ExtensionHostView.vue'
 import { loadExtensionModule, type ExtensionManifest } from '@/services/extensions'
 import { useExtensionsStore } from '@/stores/extensions'
+import { useShellContextStore } from '@/stores/shellContext'
 
 vi.mock('@/services/extensions')
+
+// Records what the element could see when it connected, which is how we assert
+// that context attributes are set before insertion rather than after.
+let contextAtConnect: Record<string, string | null> = {}
+
+class SmileyFaceStub extends HTMLElement {
+  connectedCallback() {
+    contextAtConnect = {
+      'shell-theme': this.getAttribute('shell-theme'),
+      'shell-locale': this.getAttribute('shell-locale'),
+    }
+  }
+}
 
 const routeParams = { id: 'smiley-face' }
 vi.mock('vue-router', () => ({
@@ -29,10 +43,11 @@ describe('ExtensionHostView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routeParams.id = 'smiley-face'
+    contextAtConnect = {}
     vi.mocked(loadExtensionModule).mockImplementation(async () => {
       // Mirror a real extension bundle: registering the tag is a side effect.
       if (!customElements.get('ext-smiley-face')) {
-        customElements.define('ext-smiley-face', class extends HTMLElement {})
+        customElements.define('ext-smiley-face', SmileyFaceStub)
       }
     })
   })
@@ -46,10 +61,11 @@ describe('ExtensionHostView', () => {
 
   function mountView() {
     const store = useExtensionsStore()
+    const shellContext = useShellContextStore()
     store.extensions = manifests
     store.loaded = true
     wrapper = mount(ExtensionHostView, { attachTo: document.body })
-    return { store, wrapper }
+    return { store, shellContext, wrapper }
   }
 
   it('loads the module and mounts the custom element', async () => {
@@ -93,6 +109,36 @@ describe('ExtensionHostView', () => {
     expect(wrapper!.find('[data-testid="extension-error"]').text()).toContain(
       'Failed to load "Smiley Face"',
     )
+  })
+
+  it('sets context attributes before inserting the element', async () => {
+    const { shellContext } = mountView()
+    await flushPromises()
+
+    // The element saw its context on connect, so it had theme and locale
+    // available for its first render.
+    expect(contextAtConnect).toEqual({
+      'shell-theme': shellContext.theme,
+      'shell-locale': shellContext.locale,
+    })
+  })
+
+  it('updates context attributes in place without remounting', async () => {
+    const { shellContext } = mountView()
+    await flushPromises()
+
+    const before = document.body.querySelector('ext-smiley-face')
+    expect(before?.getAttribute('shell-theme')).toBe('light')
+
+    shellContext.preference = 'dark'
+    await flushPromises()
+
+    const after = document.body.querySelector('ext-smiley-face')
+    expect(after?.getAttribute('shell-theme')).toBe('dark')
+    // Same element instance and no second import: a theme change must never
+    // remount the extension or discard its state.
+    expect(after).toBe(before)
+    expect(loadExtensionModule).toHaveBeenCalledTimes(1)
   })
 
   it('removes the element and listener on unmount', async () => {

@@ -4,9 +4,11 @@ import { useRoute } from 'vue-router'
 import AppModal from '@/components/AppModal.vue'
 import { loadExtensionModule } from '@/services/extensions'
 import { useExtensionsStore } from '@/stores/extensions'
+import { useShellContextStore } from '@/stores/shellContext'
 
 const route = useRoute()
 const store = useExtensionsStore()
+const shellContext = useShellContextStore()
 
 const host = ref<HTMLElement | null>(null)
 const error = ref<string | null>(null)
@@ -14,6 +16,13 @@ const modalMessage = ref<string | null>(null)
 
 let element: HTMLElement | null = null
 let notifyHandler: (() => void) | null = null
+
+// Context reaches an extension only as attributes on its own host element: the
+// shell calls no methods on it, assigns it no properties, and reads nothing back.
+function applyContext(target: HTMLElement) {
+  target.setAttribute('shell-theme', shellContext.theme)
+  target.setAttribute('shell-locale', shellContext.locale)
+}
 
 function teardown() {
   if (element && notifyHandler) {
@@ -45,6 +54,10 @@ async function mountExtension() {
     return
   }
   element = document.createElement(ext.tag)
+  // Attributes, then listeners, then insertion. Context has to be in place for
+  // the extension's first render, and a listener attached after insertion could
+  // miss anything dispatched while the element connects.
+  applyContext(element)
   notifyHandler = () => {
     modalMessage.value = `Hi from ${ext.name}`
   }
@@ -53,6 +66,14 @@ async function mountExtension() {
 }
 
 watch([() => route.params.id, () => store.loaded, host], mountExtension, { immediate: true })
+
+// Deliberately a separate watcher: a theme or locale change updates the mounted
+// element in place, and must never remount the extension or lose its state.
+watch([() => shellContext.theme, () => shellContext.locale], () => {
+  if (element) {
+    applyContext(element)
+  }
+})
 
 onBeforeUnmount(teardown)
 </script>

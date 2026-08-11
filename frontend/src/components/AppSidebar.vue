@@ -6,8 +6,16 @@ import IconTooling from './icons/IconTooling.vue'
 import IconCommunity from './icons/IconCommunity.vue'
 import IconSupport from './icons/IconSupport.vue'
 import { useExtensionsStore } from '@/stores/extensions'
+import { useShellContextStore } from '@/stores/shellContext'
 
 const extensionsStore = useExtensionsStore()
+const shellContext = useShellContextStore()
+
+// Reachable from every route, including an extension host: changing the theme
+// here updates a mounted extension's context attributes in place.
+function toggleTheme() {
+  shellContext.preference = shellContext.theme === 'dark' ? 'light' : 'dark'
+}
 
 interface Tool {
   to: string
@@ -45,6 +53,42 @@ const tools: Tool[] = [
         <span class="label">{{ ext.name }}</span>
       </RouterLink>
     </nav>
+
+    <div class="sidebar-footer">
+      <button
+        type="button"
+        class="theme-toggle"
+        data-testid="theme-toggle"
+        :aria-label="shellContext.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+        @click="toggleTheme"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            v-if="shellContext.theme === 'dark'"
+            d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+          <circle
+            v-if="shellContext.theme === 'dark'"
+            cx="12"
+            cy="12"
+            r="4"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+          <path
+            v-else
+            d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="label">{{ shellContext.theme === 'dark' ? 'Light' : 'Dark' }}</span>
+      </button>
+    </div>
   </aside>
 </template>
 
@@ -83,6 +127,31 @@ const tools: Tool[] = [
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-background-mute);
 }
 
 .tool-link {
@@ -125,7 +194,8 @@ const tools: Tool[] = [
     padding: 1rem 0.5rem;
   }
 
-  .tool-link {
+  .tool-link,
+  .theme-toggle {
     justify-content: center;
     padding: 0.6rem 0;
   }
