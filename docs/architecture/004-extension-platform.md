@@ -15,7 +15,7 @@ This snapshot is a consolidation. It restates the runtime model from [snapshot 0
 **Platform invariants.** Everything else in this document is the proof of these six.
 
 1. **Static files only.** No API controller, route, or middleware participates in extension discovery or delivery (`CONSUMPTION-01`).
-2. **Discovery is by convention.** A folder containing an `extension.json` is an extension. There is no registration list, manifest index, or allowlist anywhere in the repository.
+2. **Discovery is by convention; the registry is derived.** The build tooling treats any folder containing an `extension.json` as an extension — no allowlist decides which folders count. The enumeration the shell reads at runtime, `/extensions/registry.json`, is generated from that scan and rebuilt from scratch on every build. A manifest index therefore does exist, but it is a build artifact, never hand-maintained: adding an extension edits no list.
 3. **Zero extensions is a normal state.** Every discovery failure resolves silently to an empty list, and the shell shows the user no error (`CONSUMPTION-07`).
 4. **One event, one direction.** The entire runtime channel is a single DOM event, `shell:notify`, dispatched by the extension on its own host element (`EXT-16`, `EXT-17`, `EXT-18`).
 5. **Extensions ship as a layer.** They are copied onto the unmodified shell image; deploying them changes `image.repository` and `image.tag` and nothing else (`CONSUMPTION-15`).
@@ -34,7 +34,7 @@ Keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used as described in RF
 | **Shell** | The Vue 3 SPA plus the ASP.NET Core API that serves it, built and deployed as one container. | `frontend/`, `backend/` |
 | **Extension** | An independently built web component that plugs into the shell's sidebar and main view without changing the shell codebase. | One folder under `extensions/` |
 | **Manifest** | The extension's `extension.json`, declaring `{ id, name, tag }`. Authored by the extension team. | `extensions/<id>/extension.json` |
-| **Registry** | The static file listing all installed extensions. Generated at packaging time, never authored. | `/extensions/registry.json` |
+| **Registry** | The static file listing all installed extensions. | `/extensions/registry.json` |
 | **Manifest entry** | One object in the registry's `extensions` array: `{ id, name, tag, module, icon }`. | Inside the registry |
 | **Extension Module** | The single self-contained ES module the extension's build emits, served at the entry's `module` URL. | `dist/<id>.js` → `/extensions/<id>/<id>.js` |
 | **Host element** | The DOM element the shell creates from a manifest entry's `tag` and mounts in the extension host view; the element the custom-element class is upgraded onto. | Created at runtime by the shell |
