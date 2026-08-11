@@ -1,0 +1,56 @@
+replicaCount: 2
+
+image:
+  repository: shell
+  tag: ""            # defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: shell.local
+  path: /
+  pathType: Prefix
+  tls: []
+  # tls:
+  #   - secretName: shell-tls
+  #     hosts:
+  #       - shell.local
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+env: []
+# env:
+#   - name: ASPNETCORE_ENVIRONMENT
+#     value: Production
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

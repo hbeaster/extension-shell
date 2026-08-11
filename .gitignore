@@ -1,0 +1,28 @@
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+extensions/dist/
+extensions/*/dist/
+*.local
+.eslintcache
+
+# .NET / backend
+bin/
+obj/
+artifacts/
+*.user
+.vs/
+
+# IDE
+.idea/
+*.suo
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,22 @@
+# Layers built extensions onto the shell image.
+# Build the shell image first, then:
+#   docker build -f Dockerfile.extensions -t shell-ext .
+# Override the base with --build-arg SHELL_IMAGE=<image:tag> if needed.
+ARG SHELL_IMAGE=shell:latest
+
+# Stage 1: build each extension independently, then assemble the registry.
+# Extensions are auto-discovered (any folder with an extension.json); the
+# build-all script runs `npm ci` from each extension's own lockfile, so no
+# state is shared between extensions and no per-extension COPY list exists.
+# (Accepted trade-off: dependency layers are not cached across builds.)
+FROM node:24-alpine AS extensions-build
+WORKDIR /src
+COPY extensions/ ./
+RUN node scripts/build-all.mjs
+
+# Final: shell image plus extension static assets.
+# COPY runs as root even though the base image ends with USER app; the files
+# land root-owned and world-readable (644/755), which is correct for
+# read-only static assets served to the app user.
+FROM ${SHELL_IMAGE} AS final
+COPY --from=extensions-build /src/dist /app/wwwroot/extensions
