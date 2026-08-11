@@ -66,6 +66,7 @@ See `helm/shell/values.yaml` for replicas, resources, ingress, and probe setting
 
 - `docs/adr/` — Architecture Decision Records
 - `docs/architecture/` — architecture snapshots with mermaid diagrams
+- `docs/standards/` — normative standards (extension consumption, extension authoring)
 - `plans/` — working plans
 - `CLAUDE.md` / `AGENTS.md` — guides for AI coding assistants
 

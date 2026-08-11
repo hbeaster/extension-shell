@@ -2,7 +2,9 @@
 //   dist/registry.json            merged manifest list consumed by the shell
 //   dist/<id>/<id>.js             web-component bundle
 //   dist/<id>/icon.svg            sidebar icon
-// Run after `npm run build --workspaces` (the root `npm run build` does both).
+// Shell-owned packaging step: run after each extension has been built
+// independently (`npm ci && npm run build` in its own folder), or use
+// `scripts/build-all.mjs` to do both.
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -43,7 +45,7 @@ for (const key of ['id', 'tag']) {
   const seen = new Set()
   for (const entry of entries) {
     if (seen.has(entry[key])) {
-      throw new Error(`Duplicate extension ${key} "${entry[key]}"`)
+      throw new Error(`Packaging conflict: two installed extensions share ${key} "${entry[key]}" — the deployer must resolve which one ships`)
     }
     seen.add(entry[key])
   }
@@ -58,7 +60,7 @@ for (const entry of entries.sort((a, b) => a.id.localeCompare(b.id))) {
   const icon = path.join(entry.dir, 'icon.svg')
   for (const required of [bundle, icon]) {
     if (!(await exists(required))) {
-      throw new Error(`${entry.id}: missing ${required} — run the extension build first`)
+      throw new Error(`${entry.id}: missing ${required} — build the extension in its own folder (npm ci && npm run build) before assembling`)
     }
   }
   const outDir = path.join(distRoot, entry.id)

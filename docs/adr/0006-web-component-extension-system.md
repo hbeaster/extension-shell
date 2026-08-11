@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-05
+- Amended by: [ADR 0007](./0007-independent-extension-builds.md) (workspace build replaced by independent per-extension builds)
 
 ## Context
 

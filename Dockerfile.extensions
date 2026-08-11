@@ -4,15 +4,15 @@
 # Override the base with --build-arg SHELL_IMAGE=<image:tag> if needed.
 ARG SHELL_IMAGE=shell:latest
 
-# Stage 1: build all extensions and assemble the registry
+# Stage 1: build each extension independently, then assemble the registry.
+# Extensions are auto-discovered (any folder with an extension.json); the
+# build-all script runs `npm ci` from each extension's own lockfile, so no
+# state is shared between extensions and no per-extension COPY list exists.
+# (Accepted trade-off: dependency layers are not cached across builds.)
 FROM node:24-alpine AS extensions-build
 WORKDIR /src
-COPY extensions/package.json extensions/package-lock.json ./
-COPY extensions/smiley-face/package.json ./smiley-face/
-COPY extensions/buzzer/package.json ./buzzer/
-RUN npm ci
 COPY extensions/ ./
-RUN npm run build
+RUN node scripts/build-all.mjs
 
 # Final: shell image plus extension static assets.
 # COPY runs as root even though the base image ends with USER app; the files
