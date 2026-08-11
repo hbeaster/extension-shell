@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-05
 - Amended by: [ADR 0007](./0007-independent-extension-builds.md) (workspace build replaced by independent per-extension builds)
+- Amended by: [ADR 0008](./0008-bidirectional-shell-extension-communication.md) (one-directional event channel replaced by a bidirectional, asymmetric one)
 
 ## Context
 

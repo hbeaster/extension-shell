@@ -2,9 +2,10 @@
 
 Date: 2026-08-10
 Audience: Shell maintainers, extension authors, platform and deployment teams
-Related ADRs: [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md)
-Related standards: [STD 001 v1.1.0](../standards/001-extension-consumption.md), [STD 002 v2.0.0](../standards/002-extension-authoring-and-communication.md)
+Related ADRs: [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md)
+Related standards: [STD 001 v1.2.0](../standards/001-extension-consumption.md), [STD 002 v3.0.0](../standards/002-extension-authoring-and-communication.md)
 Previous snapshot: [003](./003-independent-extension-builds.md)
+Amended by: [005](./005-bidirectional-communication.md) — communication is bidirectional as of ADR 0008; this document's communication sections are updated to match
 
 ## Overview
 
@@ -17,7 +18,7 @@ This snapshot is a consolidation. It restates the runtime model from [snapshot 0
 1. **Static files only.** No API controller, route, or middleware participates in extension discovery or delivery (`CONSUMPTION-01`).
 2. **Discovery is by convention; the registry is derived.** The build tooling treats any folder containing an `extension.json` as an extension — no allowlist decides which folders count. The enumeration the shell reads at runtime, `/extensions/registry.json`, is generated from that scan and rebuilt from scratch on every build. A manifest index therefore does exist, but it is a build artifact, never hand-maintained: adding an extension edits no list.
 3. **Zero extensions is a normal state.** Every discovery failure resolves silently to an empty list, and the shell shows the user no error (`CONSUMPTION-07`).
-4. **One event, one direction.** The entire runtime channel is a single DOM event, `shell:notify`, dispatched by the extension on its own host element (`EXT-16`, `EXT-17`, `EXT-18`).
+4. **Two channels, both on the host element.** An extension sends by dispatching `shell:notify` on its own host element; the shell sends by setting `shell-theme` and `shell-locale` attributes on that same element. There is no method call, shared service, or shared module in either direction, and the shell never reads state back (`EXT-16`, `EXT-17`, `EXT-23`).
 5. **Extensions ship as a layer.** They are copied onto the unmodified shell image; deploying them changes `image.repository` and `image.tag` and nothing else (`CONSUMPTION-15`).
 6. **No extension is aware of any other.** The shell is the only party that knows the installed set (`EXT-21`, `EXT-22`).
 
@@ -38,6 +39,7 @@ Keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used as described in RF
 | **Manifest entry** | One object in the registry's `extensions` array: `{ id, name, tag, module, icon }`. | Inside the registry |
 | **Extension Module** | The single self-contained ES module the extension's build emits, served at the entry's `module` URL. | `dist/<id>.js` → `/extensions/<id>/<id>.js` |
 | **Host element** | The DOM element the shell creates from a manifest entry's `tag` and mounts in the extension host view; the element the custom-element class is upgraded onto. | Created at runtime by the shell |
+| **Context attribute** | A `shell-` prefixed attribute the shell sets on the host element to convey ambient state. The shell's only channel into a mounted extension. | `shell-theme`, `shell-locale` |
 | **Assembler** | Shell-owned packaging tooling that validates manifests and aggregates independently built artifacts into the served layout. Extensions never invoke or depend on it. | `extensions/scripts/assemble.mjs` |
 | **Layered image** | The shell container image with built extension assets copied on top, produced by a second Docker build. | `Dockerfile.extensions` |
 | **Built-in tool** | A view that ships inside the shell codebase (dashboard, data, reports, settings), as opposed to an extension. | `frontend/src/views/` |
@@ -78,11 +80,11 @@ flowchart LR
 
 An extension team owns exactly one folder. Shell-owned tooling discovers every such folder, builds each one in isolation from its own lockfile, validates its manifest, and assembles the results into a served layout containing one registry file and one directory per extension. A second Docker build copies that layout onto the unmodified shell image. In the browser, the shell fetches the registry once at startup, renders one sidebar entry per extension, and lazily imports a bundle only when the user opens that extension's route.
 
-The seam between the two sides is deliberately tiny, and it is the reason the model scales to many teams: **the shell knows exactly three authored fields about any extension — `id`, `name`, and `tag` — plus two URLs it synthesizes itself, and the extension knows exactly one string about the shell, `shell:notify`. Everything else on both sides is private.** An extension can change its framework, its build tooling, its internal structure, and its entire UI without the shell noticing, and the shell can be rewritten without breaking any extension that honours those four strings.
+The seam between the two sides is deliberately tiny, and it is the reason the model scales to many teams: **the shell knows exactly three authored fields about any extension — `id`, `name`, and `tag` — plus two URLs it synthesizes itself, and the extension knows exactly three strings about the shell: the event `shell:notify` it may send, and the attributes `shell-theme` and `shell-locale` it may read. Everything else on both sides is private.** An extension can change its framework, its build tooling, its internal structure, and its entire UI without the shell noticing, and the shell can be rewritten without breaking any extension that honours those six strings.
 
 ## Part A — How the shell discovers, serves, and runs extensions
 
-Everything in Part A is implemented by the shell team and is invisible to extension authors — an author never writes any of this code and never configures any of these files. The governing rules are `CONSUMPTION-01` through `CONSUMPTION-16`.
+Everything in Part A is implemented by the shell team and is invisible to extension authors — an author never writes any of this code and never configures any of these files. The governing rules are `CONSUMPTION-01` through `CONSUMPTION-18`.
 
 ### Serving — where /extensions comes from
 
@@ -167,7 +169,7 @@ sequenceDiagram
 
 The sidebar renders built-in tools first from their own list, then appends one entry per registry entry using the manifest `name` as the label and the manifest `icon` as a plain image source, linking to `/ext/<id>`. Order is registry order, and the registry is sorted by `id` when it is assembled. **Sidebar position is not author-controllable**: extensions are alphabetical by `id` and always follow the built-ins. There is no priority, weight, or ordering field in the manifest, and adding one would be a contract change.
 
-Mounting is a single generic route, `/ext/:id`, backed by one host view — there is no per-extension route, component, or registration. The mount sequence is normative and the order carries meaning: dynamically import the module (which registers the custom element as a side effect), create the element with `document.createElement`, attach event listeners to it, and only then insert it into the DOM. Listeners are attached before insertion so that nothing dispatched during the element's first connected and render pass can be missed. An unknown id renders an in-view error and never calls the loader at all; a failed import renders a different in-view error. Neither navigates away, which is why `/ext/:id` is declared ahead of the router's catch-all redirect. On route change and on unmount the view tears down symmetrically: remove the listener, then remove the element.
+Mounting is a single generic route, `/ext/:id`, backed by one host view — there is no per-extension route, component, or registration. The mount sequence is normative and the order carries meaning: dynamically import the module (which registers the custom element as a side effect), create the element with `document.createElement`, set the current context attributes on it, attach event listeners, and only then insert it into the DOM. Both of the middle steps happen before insertion for the same reason — attributes so the extension has its theme and locale at first render rather than after a visible correction, listeners so that nothing dispatched during the element's first connected and render pass can be missed. An unknown id renders an in-view error and never calls the loader at all; a failed import renders a different in-view error. Neither navigates away, which is why `/ext/:id` is declared ahead of the router's catch-all redirect. On route change and on unmount the view tears down symmetrically: remove the listener, then remove the element.
 
 One line deserves emphasis because it is a containment property rather than a convenience: the shell listens **only** on the element it created, never on `document` or `window`. An extension therefore has no way to address the shell globally, and an event dispatched anywhere other than its own host element simply goes nowhere.
 
@@ -182,10 +184,17 @@ One line deserves emphasis because it is a containment property rather than a co
 
 | ID | Requirement |
 | --- | --- |
-| `CONSUMPTION-11` | To mount an extension, the host view MUST: dynamically import the manifest `module` URL (registering the custom element is a side effect of the import), create the host element with `document.createElement(tag)` using the manifest `tag`, attach its event listeners to the host element, and only then insert it into the DOM. |
+| `CONSUMPTION-11` | To mount an extension, the host view MUST: dynamically import the manifest `module` URL (registering the custom element is a side effect of the import), create the host element with `document.createElement(tag)` using the manifest `tag`, set the current context attributes on it (see `CONSUMPTION-17`), attach its event listeners to the host element, and only then insert it into the DOM. Context attributes MUST be set before insertion so the extension has its context at first render. |
 | `CONSUMPTION-12` | An unknown extension id or a failed module import MUST render an in-view error message and MUST NOT mount an element or navigate away. |
 | `CONSUMPTION-13` | On route change and on unmount, the host view MUST tear down completely: remove its event listeners from the host element and remove the element from the DOM. |
-| `CONSUMPTION-14` | The shell MUST listen for extension events only on the host element it created, never on `document` or `window`. The current event vocabulary is `shell:notify` (no payload), which the shell answers by opening its modal; the full contract is defined in [the communication contract](#the-communication-contract--one-event-one-direction) below. |
+| `CONSUMPTION-14` | The shell MUST listen for extension events only on the host element it created, never on `document` or `window`, and MUST write to an extension only through context attributes on that same element. The current inbound event vocabulary is `shell:notify` (no payload), which the shell answers by opening its modal; the full contract is defined in [the communication contract](#the-communication-contract--two-channels-one-element) below. |
+
+**Normative rules — context attributes**
+
+| ID | Requirement |
+| --- | --- |
+| `CONSUMPTION-17` | The shell MUST set the current context attributes — `shell-theme` and `shell-locale` — on the host element before inserting it into the DOM, and MUST update them in place on the mounted element when a value changes. It MUST NOT remount, replace, or re-import the extension to deliver a changed value. Values MUST be scalar strings: `shell-theme` is `light` or `dark`, `shell-locale` is a BCP 47 language tag. |
+| `CONSUMPTION-18` | The shell MUST NOT call methods on the host element, assign properties to it beyond the context attributes, or read state back off it. The element is opaque to the shell: context flows in by attribute and out by event, and by nothing else. Extensions are not required to honour context attributes, so the shell MUST NOT depend on any observable reaction to one. |
 
 ### Delivery — layered images and deployment
 
@@ -267,7 +276,7 @@ Nineteen files in the shell repository have any awareness that extensions exist:
 
 ## Part B — How extensions are packaged
 
-Everything in Part B is owned by the extension author. The governing rules are `EXT-01` through `EXT-22`. The reference extensions are built with Vue, but the contract does not require it — the shell only ever sees a custom element, and any framework or none is conformant.
+Everything in Part B is owned by the extension author. The governing rules are `EXT-01` through `EXT-26`. The reference extensions are built with Vue, but the contract does not require it — the shell only ever sees a custom element, and any framework or none is conformant.
 
 ### The extension package — anatomy of a folder
 
@@ -376,9 +385,11 @@ The icon is worth its own note because it behaves unlike anything else in the pa
 | `EXT-07` | `id` and `tag` MUST each be unique across the installed extension set. Uniqueness is enforced by the shell's assembler at packaging time; a conflict is a packaging error the deployer resolves. Extension authors are not expected to coordinate with each other. |
 | `EXT-08` | `name` is the human-readable label the shell shows in the sidebar and in error messages; it SHOULD be short (one or two words). |
 
-### The communication contract — one event, one direction
+### The communication contract — two channels, one element
 
-An extension talks to the shell by dispatching a DOM `CustomEvent` on its own host element. The vocabulary is exactly one event, `shell:notify`, with no payload; the shell responds by opening its modal, captioned with the extension's `name` from the registry. There is no channel in the other direction — no props, no attributes, no method calls, no shared services, no theming API. The shell creates the element, attaches its listener, and inserts it, and that is the entirety of its interaction with the element. An extension must therefore assume nothing about its container beyond having been appended to the DOM.
+Both directions ride on the extension's own host element, and nothing else connects the two sides. **Outbound**, an extension dispatches a DOM `CustomEvent`; the vocabulary is exactly one event, `shell:notify`, with no payload, and the shell answers by opening its modal captioned with the extension's `name` from the registry. **Inbound**, the shell sets context attributes on that same element; the vocabulary is exactly two, `shell-theme` and `shell-locale`, both carrying scalar strings. There is no method call, shared service, shared module, or property assignment in either direction, and the shell never reads state back off the element.
+
+Context attributes carry *state* rather than *signals*, which is why ADR 0008 chose them over symmetric inbound events: an extension mounted after the last theme change would have missed an event and would need a request/response handshake to catch up, whereas an attribute is simply always readable. Honouring them is optional — an extension that ignores context attributes entirely is conformant, and one written before they existed keeps working untouched. That is what makes the widening backward compatible.
 
 Two mechanical details are not stated as rules in either standard because they are emergent properties of the reference stack, and both will cost a team an afternoon if they meet them undocumented.
 
@@ -392,21 +403,30 @@ Two mechanical details are not stated as rules in either standard because they a
 | --- | --- |
 | `EXT-13` | Importing the bundle MUST register the manifest `tag` with `customElements.define(...)` as a side effect, and that registration MUST be its only side effect. Registration MUST be guarded with `customElements.get(tag)` so a repeat import does not throw. |
 | `EXT-14` | The element MUST render entirely within itself. An extension MUST NOT modify the DOM outside its own element, register additional custom-element tags, or patch globals (`window`, `document`, prototypes). |
-| `EXT-15` | The element MUST NOT assume anything about its container beyond being appended to the DOM: the shell passes no props or attributes and calls no methods on it (see `EXT-19`). |
+| `EXT-15` | The element MUST NOT assume anything about its container beyond being appended to the DOM and receiving the context attributes defined in the context-attribute rules below. The shell calls no methods on the element and assigns no properties to it beyond those its declared attributes reflect. |
 
 **Normative rules — communication**
 
 | ID | Requirement |
 | --- | --- |
-| `EXT-16` | The only channel between an extension and the shell is DOM `CustomEvent`s dispatched on the extension's own host element. Events dispatched on `document`, `window`, or any other element are not part of the contract and MUST NOT be relied on. |
-| `EXT-17` | Communication is one-directional, extension → shell. There is no shell-to-extension channel: no props, attributes, method calls, shared services, or theming API. |
-| `EXT-18` | The current event vocabulary is exactly one event: `shell:notify`, with no payload. Dispatching it causes the shell to open its notification modal. (In Vue, `defineEmits<{ 'shell:notify': [] }>()` plus `defineCustomElement` produces a conformant DOM event.) |
+| `EXT-16` | The only channels between an extension and the shell are, outbound, DOM `CustomEvent`s dispatched on the extension's own host element, and inbound, context attributes set by the shell on that same element. Events dispatched on `document`, `window`, or any other element are not part of the contract and MUST NOT be relied on. |
+| `EXT-17` | Communication is bidirectional but asymmetric: extension → shell by `CustomEvent` on the host element, shell → extension by context attribute on the host element. There is no method-call, shared-service, shared-module, or direct-property channel in either direction, and the shell never reads state back off the element. |
+| `EXT-18` | The outbound event vocabulary is exactly one event: `shell:notify`, with no payload. Dispatching it causes the shell to open its notification modal. (In Vue, `defineEmits<{ 'shell:notify': [] }>()` plus `defineCustomElement` produces a conformant DOM event.) |
+
+**Normative rules — context attributes**
+
+| ID | Requirement |
+| --- | --- |
+| `EXT-23` | The inbound context-attribute vocabulary is exactly two attributes: `shell-theme` and `shell-locale`. Values MUST be treated as scalar strings — `shell-theme` is `light` or `dark`, `shell-locale` is a BCP 47 language tag. An extension MUST NOT expect structured or encoded values in either. |
+| `EXT-24` | The `shell-` attribute prefix is reserved to the shell. An extension MUST NOT define, set, or write to any `shell-` prefixed attribute on its own host element, and MUST NOT use the prefix for its own internal attributes. |
+| `EXT-25` | Honouring context attributes is OPTIONAL. An extension MUST tolerate an attribute being absent, empty, or carrying an unrecognised value, and MUST continue to function if one never arrives and never changes. An extension that ignores context attributes entirely is conformant. |
+| `EXT-26` | Context attributes MAY change at any time while the element is mounted. An extension that reacts to them MUST treat a change as an in-place update and MUST NOT re-initialise, remount, discard user input, or dispatch events in response. |
 
 **Normative rules — independence**
 
 | ID | Requirement |
 | --- | --- |
-| `EXT-20` | An extension MUST NOT import code from `frontend/` or depend on the shell's framework or bundler versions. The manifest fields and the event vocabulary above are the entire contract. |
+| `EXT-20` | An extension MUST NOT import code from `frontend/` or depend on the shell's framework or bundler versions. The manifest fields and the two vocabularies above are the entire contract. |
 | `EXT-21` | An extension MUST NOT be aware of, discover, address, communicate with, or depend on any other extension: no imports of another extension's code or types, no events aimed at another extension, no fetching `/extensions/registry.json` or otherwise enumerating installed extensions, and no assuming any other extension is (or is not) installed. Each extension behaves as if it were the only one installed. |
 
 That last sentence is the one to remember: **each extension behaves as if it were the only one installed.** Enumeration is banned as explicitly as communication — an extension may not fetch the registry to find out who else is present, which keeps the installed set knowable only to the shell and makes any deployment combination safe by construction.
@@ -425,7 +445,7 @@ Four files are required by the contract regardless of how you build; the rest ar
 | `tsconfig.json` | Reference stack | Type settings only | Modern target, bundler module resolution, strict, no emit. Note the `build` script is the bundler alone — there is no separate type-check step, unlike the shell frontend. |
 | `env.d.ts` | Reference stack | Editor support | Declares the custom-element single-file component module type. |
 | `src/main.ts` | Contract in effect | The entry point | Its only side effect must be a guarded `customElements.define` for the manifest `tag`. |
-| `src/<Name>.ce.vue` | Reference stack | The component | Styles are **not** scoped — they are inlined into the JavaScript and injected into the shadow root, so no separate CSS file is emitted and scoping would be redundant. Emits declared as `defineEmits<{ 'shell:notify': [] }>()`. |
+| `src/<Name>.ce.vue` | Reference stack | The component | Styles are **not** scoped — they are inlined into the JavaScript and injected into the shadow root, so no separate CSS file is emitted and scoping would be redundant. Emits declared as `defineEmits<{ 'shell:notify': [] }>()`; context attributes read by declaring `shellTheme` / `shellLocale` props. |
 | `dist/<id>.js` | Contract | The only shipped artifact | Generated and gitignored. One self-contained ES module with every runtime dependency bundled. |
 
 Not present anywhere, and not needed: no `.npmrc`, no `packageManager` field, no npm workspace configuration, no bundler externals, and no output-directory override.
@@ -472,6 +492,15 @@ const emit = defineEmits<{ 'shell:notify': [] }>()
 
 Dispatch it from the component the shell mounted — the host element — and send no payload. An event raised from deeper inside the shadow tree will not reach the shell, and anything placed in `detail` is discarded.
 
+Reading the shell's context is optional and needs no new machinery. Declare the attributes as props and `defineCustomElement` wires them through; note that the camelCase prop name maps to the hyphenated attribute:
+
+```ts
+const props = defineProps<{ shellTheme?: string; shellLocale?: string }>()
+const dark = computed(() => props.shellTheme === 'dark')
+```
+
+Without a framework the same thing is `observedAttributes` plus `attributeChangedCallback`. Either way the extension must still render sensibly when the attributes are absent, must treat a later change as an in-place update rather than a reason to re-initialise, and must never write to the `shell-` namespace itself.
+
 Then:
 
 1. Create the folder with the files above, plus `icon.svg` at its root.
@@ -483,19 +512,21 @@ There is no fifth step. No registration list, no workspace entry, no `Dockerfile
 
 ## Change control — how the contract widens
 
-The contract is narrow on purpose, and it widens only one way. A new event, a payload on an existing event, or any channel from the shell to an extension — props, attributes, method calls, shared services, theming — requires a new accepted ADR **before** implementation. So does any cross-extension capability, which additionally must be mediated by the shell rather than established directly between extensions, because the shell remains the only party that knows the installed set.
+The contract is narrow on purpose, and it widens only one way. A new event, a payload on an existing event, a third context attribute, a structured attribute value, or any additional channel in either direction — method calls, shared services, shared modules — requires a new accepted ADR **before** implementation. So does any cross-extension capability, which additionally must be mediated by the shell rather than established directly between extensions, because the shell remains the only party that knows the installed set.
 
 This is deliberately a design-review gate rather than a code-review one. Each of these changes converts a property the platform currently guarantees into one it merely happens to have, and that trade should be recorded before it is made rather than discovered afterwards.
+
+ADR 0008 is the worked example of the gate operating. Opening the shell-to-extension direction was a real widening: it amended ADR 0006, took STD 002 to v3.0.0 and STD 001 to v1.2.0, and produced [snapshot 005](./005-bidirectional-communication.md) — all before any implementation. The narrowness that survived is as deliberate as the widening: the inbound channel carries two scalar attributes and nothing else, because each additional thing it could carry is a coupling that would have to be argued for on its own.
 
 | ID | Requirement |
 | --- | --- |
 | `CONSUMPTION-16` | Widening the shell/extension contract (new events, payloads, props, shared services, theming, a shell-to-extension channel) REQUIRES a new accepted ADR before any implementation, per ADR 0006. |
-| `EXT-19` | New events, event payloads, or any shell-to-extension channel REQUIRE a new accepted ADR before use, per ADR 0006. Until such an ADR exists, an extension MUST NOT dispatch events other than `shell:notify` with the expectation that the shell handles them. |
+| `EXT-19` | New events, event payloads, new context attributes, structured attribute values, or any additional channel in either direction REQUIRE a new accepted ADR before use, per ADR 0006 and ADR 0008. Until such an ADR exists, an extension MUST NOT dispatch events other than `shell:notify` with the expectation that the shell handles them, and MUST NOT depend on any attribute outside the context-attribute vocabulary. |
 | `EXT-22` | The shell is the only party with knowledge of the installed extension set. Any future cross-extension capability MUST be mediated by the shell under a new accepted ADR (per `EXT-19`); direct extension-to-extension channels are out of contract. |
 
 ## Requirement index
 
-All thirty-eight requirements, with the section that explains each.
+All forty-four requirements, with the section that explains each.
 
 | ID | Summary | Section |
 | --- | --- | --- |
@@ -509,12 +540,14 @@ All thirty-eight requirements, with the section that explains each.
 | `CONSUMPTION-08` | Registry access lives in the extensions service, not the API client | Discovery |
 | `CONSUMPTION-09` | One sidebar entry per registry entry, after built-ins, in registry order | Presentation |
 | `CONSUMPTION-10` | `/ext/:id` is one generic host view; unknown ids handled in the view | Presentation |
-| `CONSUMPTION-11` | Mount order: import, create, listen, then insert | Lifecycle |
+| `CONSUMPTION-11` | Mount order: import, create, set attributes, listen, then insert | Lifecycle |
 | `CONSUMPTION-12` | Unknown id or failed import renders an in-view error and does not navigate | Lifecycle |
 | `CONSUMPTION-13` | Teardown removes the listener and the element on route change and unmount | Lifecycle |
-| `CONSUMPTION-14` | Listen only on the created host element, never on `document` or `window` | Lifecycle |
+| `CONSUMPTION-14` | Listen only on the created host element; write to it only by attribute | Lifecycle |
 | `CONSUMPTION-15` | Layered delivery; no shell rebuild and no chart change beyond image coordinates | Delivery |
 | `CONSUMPTION-16` | Widening the contract requires a new accepted ADR first | Change control |
+| `CONSUMPTION-17` | Set context attributes before insertion; update them in place, never by remounting | Context attributes |
+| `CONSUMPTION-18` | No method calls, no property assignment, no reading state back off the element | Context attributes |
 | `EXT-01` | One standalone folder with its own package, lockfile, and modules; no workspace | Package anatomy |
 | `EXT-02` | Folder must contain manifest, icon, a package with a `build` script, and a lockfile | Package anatomy |
 | `EXT-03` | Must build in isolation from a clean checkout, referencing nothing outside itself | Package anatomy |
@@ -529,14 +562,18 @@ All thirty-eight requirements, with the section that explains each.
 | `EXT-12` | Vue extensions must define `process.env.NODE_ENV` at build time | Build and assembly |
 | `EXT-13` | Import registers the manifest tag, guarded, as its only side effect | Communication contract |
 | `EXT-14` | Render entirely within the element; no outside DOM, extra tags, or global patching | Communication contract |
-| `EXT-15` | Assume nothing about the container; no props, attributes, or method calls arrive | Communication contract |
-| `EXT-16` | The only channel is CustomEvents on the extension's own host element | Communication contract |
-| `EXT-17` | One-directional, extension to shell; no shell-to-extension channel exists | Communication contract |
-| `EXT-18` | The vocabulary is exactly `shell:notify`, with no payload | Communication contract |
-| `EXT-19` | New events, payloads, or a reverse channel require a new accepted ADR | Change control |
+| `EXT-15` | Assume nothing about the container beyond the context attributes; no methods are called | Communication contract |
+| `EXT-16` | Both channels ride the extension's own host element: events out, attributes in | Communication contract |
+| `EXT-17` | Bidirectional but asymmetric; no method, shared-service, or shared-module channel | Communication contract |
+| `EXT-18` | The outbound vocabulary is exactly `shell:notify`, with no payload | Communication contract |
+| `EXT-19` | New events, payloads, attributes, or channels require a new accepted ADR | Change control |
 | `EXT-20` | No imports from the shell; no dependence on its framework or bundler versions | Communication contract |
 | `EXT-21` | No awareness of, or communication with, any other extension; no enumeration | Communication contract |
 | `EXT-22` | The shell alone knows the installed set; cross-extension work must be mediated | Change control |
+| `EXT-23` | The inbound vocabulary is exactly `shell-theme` and `shell-locale`, scalar strings | Communication contract |
+| `EXT-24` | The `shell-` attribute prefix is reserved to the shell | Communication contract |
+| `EXT-25` | Honouring context attributes is optional; absence must be tolerated | Communication contract |
+| `EXT-26` | Attribute changes are in-place updates, never a reason to re-initialise | Communication contract |
 
 ## References
 
@@ -544,10 +581,12 @@ All thirty-eight requirements, with the section that explains each.
 - STD 002 — Extension Authoring and Shell Communication, v2.0.0 ([`docs/standards/002-extension-authoring-and-communication.md`](../standards/002-extension-authoring-and-communication.md)) — authoritative for `EXT-01` … `EXT-22`.
 - ADR 0006 — Web-component extension system with a static registry ([`docs/adr/0006-web-component-extension-system.md`](../adr/0006-web-component-extension-system.md)) — why custom elements and a static registry, and why module federation, iframes, and a backend discovery endpoint were rejected.
 - ADR 0007 — Independent extension builds ([`docs/adr/0007-independent-extension-builds.md`](../adr/0007-independent-extension-builds.md)) — why the npm workspace was removed in favour of standalone packages.
+- ADR 0008 — Bidirectional shell/extension communication via context attributes ([`docs/adr/0008-bidirectional-shell-extension-communication.md`](../adr/0008-bidirectional-shell-extension-communication.md)) — why the one-way channel was opened, and why attributes rather than inbound events or an injected API object.
 - ADR 0003 — Single-container serving model ([`docs/adr/0003-single-container-serving.md`](../adr/0003-single-container-serving.md)) — why one container serves the SPA, the API, and the extensions.
 - Architecture 001 — Initial Architecture ([`docs/architecture/001-initial-architecture.md`](./001-initial-architecture.md)) — the Kubernetes runtime topology, which this snapshot does not redraw because extensions do not change it.
 - Architecture 002 — Extension System ([`docs/architecture/002-extension-system.md`](./002-extension-system.md)) — the original runtime and layering snapshot, kept as history.
 - Architecture 003 — Independent Extension Builds ([`docs/architecture/003-independent-extension-builds.md`](./003-independent-extension-builds.md)) — the build and packaging change, kept as history.
+- Architecture 005 — Bidirectional Communication ([`docs/architecture/005-bidirectional-communication.md`](./005-bidirectional-communication.md)) — the communication change recorded in this document's amended sections.
 - RFC 2119 and RFC 8174 — normative keyword interpretation.
 
 Where this document and STD 001 or STD 002 disagree, the standard is correct and this document is wrong.

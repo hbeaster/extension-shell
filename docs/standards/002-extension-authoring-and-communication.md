@@ -1,19 +1,19 @@
 # STD 002 — Extension Authoring and Shell Communication
 
 Status: Active
-Version: 2.0.0
-Date: 2026-08-06
-Related ADRs: [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md)
+Version: 3.0.0
+Date: 2026-08-10
+Related ADRs: [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md)
 
 ## 1. Purpose and scope
 
 This standard defines how to create an extension for the shell: its folder layout,
 manifest, build output, custom-element behavior, and the communication contract between
-an extension and the shell.
+an extension and the shell in both directions.
 
 It does not cover how the shell serves and loads extensions — that is
 [STD 001](./001-extension-consumption.md). The two standards describe the two sides of
-the same contract decided in ADR 0006.
+the same contract decided in ADR 0006 and widened in ADR 0008.
 
 ## 2. Audience
 
@@ -35,6 +35,9 @@ all capitals, as shown here.
 - **Extension Module** — the single ES module the extension's build emits (`dist/<id>.js`).
 - **Host element** — the DOM element the shell creates from the manifest `tag` and
   mounts in its extension view; the element your custom-element class is upgraded onto.
+- **Context attribute** — a `shell-` prefixed attribute the shell sets on the host
+  element to convey ambient state (currently theme and locale). Written by the shell,
+  read by the extension; see §5.6.
 - **Assembler** — `extensions/scripts/assemble.mjs`, shell-owned packaging tooling that
   aggregates independently built extension artifacts into `extensions/dist/` (bundles,
   icons, `registry.json`) for the shell to serve. Extensions never invoke or depend on
@@ -99,31 +102,52 @@ All manifest rules are enforced by the assembler; violations fail packaging.
   modify the DOM outside its own element, register additional custom-element tags, or
   patch globals (`window`, `document`, prototypes).
 - **EXT-15** — The element MUST NOT assume anything about its container beyond being
-  appended to the DOM: the shell passes no props or attributes and calls no methods on
-  it (see EXT-19).
+  appended to the DOM and receiving the context attributes defined in §5.6. The shell
+  calls no methods on the element and assigns no properties to it beyond those its
+  declared attributes reflect.
 
 ### 5.5 Communication with the shell
 
-- **EXT-16** — The only channel between an extension and the shell is DOM `CustomEvent`s
-  dispatched on the extension's own host element. Events dispatched on `document`,
+- **EXT-16** — The only channels between an extension and the shell are, outbound, DOM
+  `CustomEvent`s dispatched on the extension's own host element, and inbound, context
+  attributes set by the shell on that same element. Events dispatched on `document`,
   `window`, or any other element are not part of the contract and MUST NOT be relied on.
-- **EXT-17** — Communication is one-directional, extension → shell. There is no
-  shell-to-extension channel: no props, attributes, method calls, shared services, or
-  theming API.
-- **EXT-18** — The current event vocabulary is exactly one event: `shell:notify`, with no
-  payload. Dispatching it causes the shell to open its notification modal. (In Vue,
+- **EXT-17** — Communication is bidirectional but asymmetric: extension → shell by
+  `CustomEvent` on the host element, shell → extension by context attribute on the host
+  element. There is no method-call, shared-service, shared-module, or direct-property
+  channel in either direction, and the shell never reads state back off the element.
+- **EXT-18** — The outbound event vocabulary is exactly one event: `shell:notify`, with
+  no payload. Dispatching it causes the shell to open its notification modal. (In Vue,
   `defineEmits<{ 'shell:notify': [] }>()` plus `defineCustomElement` produces a
   conformant DOM event.)
-- **EXT-19** — New events, event payloads, or any shell-to-extension channel REQUIRE a
-  new accepted ADR before use, per ADR 0006. Until such an ADR exists, an extension
-  MUST NOT dispatch events other than `shell:notify` with the expectation that the shell
-  handles them.
+- **EXT-19** — New events, event payloads, new context attributes, structured attribute
+  values, or any additional channel in either direction REQUIRE a new accepted ADR
+  before use, per ADR 0006 and ADR 0008. Until such an ADR exists, an extension MUST NOT
+  dispatch events other than `shell:notify` with the expectation that the shell handles
+  them, and MUST NOT depend on any attribute outside the vocabulary in §5.6.
 
-### 5.6 Independence
+### 5.6 Shell context attributes
+
+- **EXT-23** — The inbound context-attribute vocabulary is exactly two attributes:
+  `shell-theme` and `shell-locale`. Values MUST be treated as scalar strings —
+  `shell-theme` is `light` or `dark`, `shell-locale` is a BCP 47 language tag. An
+  extension MUST NOT expect structured or encoded values in either.
+- **EXT-24** — The `shell-` attribute prefix is reserved to the shell. An extension MUST
+  NOT define, set, or write to any `shell-` prefixed attribute on its own host element,
+  and MUST NOT use the prefix for its own internal attributes.
+- **EXT-25** — Honouring context attributes is OPTIONAL. An extension MUST tolerate an
+  attribute being absent, empty, or carrying an unrecognised value, and MUST continue to
+  function if one never arrives and never changes. An extension that ignores context
+  attributes entirely is conformant.
+- **EXT-26** — Context attributes MAY change at any time while the element is mounted.
+  An extension that reacts to them MUST treat a change as an in-place update and MUST
+  NOT re-initialise, remount, discard user input, or dispatch events in response.
+
+### 5.7 Independence
 
 - **EXT-20** — An extension MUST NOT import code from `frontend/` or depend on the
-  shell's framework or bundler versions. The manifest fields and the event vocabulary in
-  §5.5 are the entire contract.
+  shell's framework or bundler versions. The manifest fields and the vocabularies in
+  §5.5 and §5.6 are the entire contract.
 - **EXT-21** — An extension MUST NOT be aware of, discover, address, communicate with,
   or depend on any other extension: no imports of another extension's code or types, no
   events aimed at another extension, no fetching `/extensions/registry.json` or
@@ -164,6 +188,19 @@ if (!customElements.get(TAG)) {
 }
 ```
 
+Reading context attributes is optional and needs no new machinery. In Vue, declare them
+as props and `defineCustomElement` wires the attributes through; note the camelCase prop
+name maps to the hyphenated attribute:
+
+```ts
+const props = defineProps<{ shellTheme?: string; shellLocale?: string }>()
+const dark = computed(() => props.shellTheme === 'dark')
+```
+
+Without a framework, the same thing is `observedAttributes` plus
+`attributeChangedCallback`. Either way the extension MUST still render sensibly when the
+attributes are absent (EXT-25), because the shell may set neither.
+
 Development loop: there is no HMR for extension bundles. Build inside the extension's
 own folder (`npm ci && npm run build`), then run `node scripts/assemble.mjs` from
 `extensions/` to write `extensions/dist/` — or `node scripts/build-all.mjs` to build
@@ -190,8 +227,11 @@ A new or changed extension conforms to this standard when:
       defines `process.env.NODE_ENV` (EXT-09…EXT-12).
 - [ ] Importing the bundle registers exactly the manifest `tag`, guarded, with no other
       side effects (EXT-13…EXT-15).
-- [ ] It communicates only via `shell:notify` on its own host element, or a later event
-      vocabulary backed by an accepted ADR (EXT-16…EXT-19).
+- [ ] It sends nothing but `shell:notify` on its own host element, or a later vocabulary
+      backed by an accepted ADR (EXT-16…EXT-19).
+- [ ] It renders correctly with the context attributes absent, does not write to the
+      `shell-` namespace, and treats attribute changes as in-place updates
+      (EXT-23…EXT-26).
 - [ ] It imports nothing from the shell codebase and knows nothing of other extensions
       (EXT-20…EXT-22).
 
@@ -199,8 +239,10 @@ A new or changed extension conforms to this standard when:
 
 - [ADR 0006 — Web-component extension system with a static registry](../adr/0006-web-component-extension-system.md)
 - [ADR 0007 — Independent extension builds](../adr/0007-independent-extension-builds.md)
+- [ADR 0008 — Bidirectional shell/extension communication via context attributes](../adr/0008-bidirectional-shell-extension-communication.md)
 - [Architecture 002 — Extension System](../architecture/002-extension-system.md)
 - [Architecture 003 — Independent Extension Builds](../architecture/003-independent-extension-builds.md)
+- [Architecture 005 — Bidirectional Communication](../architecture/005-bidirectional-communication.md)
 - [STD 001 — Extension Consumption by the Shell](./001-extension-consumption.md)
 - [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)
 
@@ -208,5 +250,6 @@ A new or changed extension conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.0.0 | 2026-08-10 | Bidirectional communication per ADR 0008: shell → extension context attributes added (new §5.6, EXT-23…EXT-26); EXT-15, EXT-16, EXT-17 and EXT-19 rewritten; EXT-18 scoped to the outbound vocabulary; EXT-20 updated; Independence renumbered to §5.7. |
 | 2.0.0 | 2026-08-06 | Independent builds per ADR 0007: standalone packages with own lockfiles (EXT-01…EXT-03 rewritten), packaging-time uniqueness (EXT-07), inter-extension awareness banned (new EXT-21, EXT-22). |
 | 1.0.0 | 2026-08-06 | Initial standard, codifying ADR 0006 as implemented. |
