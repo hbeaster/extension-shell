@@ -145,7 +145,7 @@ All manifest rules are enforced by the assembler; violations fail packaging.
 
 ### 5.7 Independence
 
-- **EXT-20** — An extension MUST NOT import code from `frontend/` or depend on the
+- **EXT-20** — An extension MUST NOT import code from `shell/frontend/` or depend on the
   shell's framework or bundler versions. The manifest fields and the vocabularies in
   §5.5 and §5.6 are the entire contract.
 - **EXT-21** — An extension MUST NOT be aware of, discover, address, communicate with,

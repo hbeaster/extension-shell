@@ -25,7 +25,7 @@ flowchart LR
     ed -->|COPY| WE
 ```
 
-The shell image (`Dockerfile`) is unchanged and still runs standalone — with no `/extensions` files installed, the registry fetch soft-fails and the sidebar shows only the built-in tools. `Dockerfile.extensions` builds the `extensions/` npm workspace and copies `extensions/dist/` into `wwwroot/extensions/`; everything else (entrypoint, port, user, probes) is inherited.
+The shell image (`shell/Dockerfile`) is unchanged and still runs standalone — with no `/extensions` files installed, the registry fetch soft-fails and the sidebar shows only the built-in tools. `Dockerfile.extensions` builds the `extensions/` npm workspace and copies `extensions/dist/` into `wwwroot/extensions/`; everything else (entrypoint, port, user, probes) is inherited.
 
 ## Runtime flow
 

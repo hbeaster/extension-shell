@@ -1,15 +1,19 @@
+# Builds the shell image. The build context is the repository root, not this
+# folder, so that one .dockerignore serves both this and Dockerfile.extensions:
+#   docker build -f shell/Dockerfile -t shell .
+
 # Stage 1: build the Vue SPA
 FROM node:24-alpine AS frontend-build
 WORKDIR /src
-COPY frontend/package.json frontend/package-lock.json ./
+COPY shell/frontend/package.json shell/frontend/package-lock.json ./
 RUN npm ci
-COPY frontend/ ./
+COPY shell/frontend/ ./
 RUN npm run build-only
 
 # Stage 2: build and publish the .NET API
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend-build
 WORKDIR /src
-COPY backend/ ./
+COPY shell/backend/ ./
 RUN dotnet publish src/Shell.Api -c Release -o /app/publish
 
 # Final: runtime image with SPA assets in wwwroot

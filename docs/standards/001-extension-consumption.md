@@ -18,7 +18,7 @@ standards describe the two sides of the same contract decided in ADR 0006.
 
 ## 2. Audience
 
-Developers working on the shell itself (`frontend/`, `backend/`, `Dockerfile*`,
+Developers working on the shell itself (`shell/`, `Dockerfile.extensions`,
 `helm/shell/`). Extension authors need STD 002; they may read this standard to understand
 what the shell guarantees.
 
@@ -78,7 +78,7 @@ all capitals, as shown here.
   type, unparseable body, or missing `extensions` array — MUST resolve to an empty
   extension list. The shell MUST NOT surface an error to the user for an absent or
   invalid registry: running with zero extensions is a normal state.
-- **CONSUMPTION-08** — Registry access MUST live in `frontend/src/services/extensions.ts`, not
+- **CONSUMPTION-08** — Registry access MUST live in `shell/frontend/src/services/extensions.ts`, not
   `services/api.ts`. The two have deliberately different failure semantics: `api.ts`
   throws on error for `/api/*` endpoints; the registry soft-fails to an empty list.
 
@@ -136,22 +136,23 @@ all capitals, as shown here.
 
 The requirements above are implemented and tested here:
 
-- Serving: `backend/src/Shell.Api/Program.cs` (static-file middleware, `Extensions:RootPath`
-  guard), `backend/src/Shell.Api/appsettings.Development.json`, `frontend/vite.config.ts`
-  (dev proxy).
-- Discovery: `frontend/src/services/extensions.ts` (soft-fail cases),
-  `frontend/src/stores/extensions.ts`, `frontend/src/App.vue` (startup load);
-  behavior specified in `frontend/src/services/__tests__/extensions.spec.ts`.
-- Presentation: `frontend/src/components/AppSidebar.vue`, `frontend/src/router/index.ts`.
-- Lifecycle: `frontend/src/views/ExtensionHostView.vue`; behavior specified in
-  `frontend/src/views/__tests__/ExtensionHostView.spec.ts`.
-- Context attributes: `frontend/src/stores/shellContext.ts` (the shell's theme and
+- Serving: `shell/backend/src/Shell.Api/Program.cs` (static-file middleware,
+  `Extensions:RootPath` guard), `shell/backend/src/Shell.Api/appsettings.Development.json`,
+  `shell/frontend/vite.config.ts` (dev proxy).
+- Discovery: `shell/frontend/src/services/extensions.ts` (soft-fail cases),
+  `shell/frontend/src/stores/extensions.ts`, `shell/frontend/src/App.vue` (startup load);
+  behavior specified in `shell/frontend/src/services/__tests__/extensions.spec.ts`.
+- Presentation: `shell/frontend/src/components/AppSidebar.vue`,
+  `shell/frontend/src/router/index.ts`.
+- Lifecycle: `shell/frontend/src/views/ExtensionHostView.vue`; behavior specified in
+  `shell/frontend/src/views/__tests__/ExtensionHostView.spec.ts`.
+- Context attributes: `shell/frontend/src/stores/shellContext.ts` (the shell's theme and
   locale, with `system` resolved to a concrete value before it reaches an extension),
-  `frontend/src/views/ExtensionHostView.vue` (`applyContext`, set before insertion and
+  `shell/frontend/src/views/ExtensionHostView.vue` (`applyContext`, set before insertion and
   updated by a watcher separate from the mount watcher so a change never remounts),
-  `frontend/src/components/AppSidebar.vue` (the theme control, reachable from an
+  `shell/frontend/src/components/AppSidebar.vue` (the theme control, reachable from an
   extension route); behavior specified in
-  `frontend/src/stores/__tests__/shellContext.spec.ts` and the host-view tests.
+  `shell/frontend/src/stores/__tests__/shellContext.spec.ts` and the host-view tests.
 - Deployment: `Dockerfile.extensions`; runtime flow diagrams in
   [architecture snapshot 002](../architecture/002-extension-system.md); build and
   packaging flow in

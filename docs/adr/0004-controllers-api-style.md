@@ -17,5 +17,5 @@ Minimal APIs have less ceremony and are the modern template default, but control
 
 ## Consequences
 
-- Endpoints live in `backend/src/Shell.Api/Controllers/`, one controller per resource.
+- Endpoints live in `shell/backend/src/Shell.Api/Controllers/`, one controller per resource.
 - Cross-cutting concerns use MVC filters/middleware rather than endpoint filters.

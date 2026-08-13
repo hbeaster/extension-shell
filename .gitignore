@@ -1,7 +1,7 @@
 # Node / frontend
 node_modules/
-frontend/dist/
-frontend/coverage/
+shell/frontend/dist/
+shell/frontend/coverage/
 extensions/dist/
 extensions/*/dist/
 *.local

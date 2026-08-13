@@ -3,10 +3,10 @@
 .gitignore
 
 # Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/coverage/
-frontend/.eslintcache
+shell/frontend/node_modules/
+shell/frontend/dist/
+shell/frontend/coverage/
+shell/frontend/.eslintcache
 
 # Extensions
 extensions/node_modules/
@@ -15,8 +15,8 @@ extensions/dist/
 extensions/*/dist/
 
 # Backend build output
-backend/**/bin/
-backend/**/obj/
+shell/backend/**/bin/
+shell/backend/**/obj/
 
 # Docs & tooling
 docs/

@@ -53,7 +53,7 @@ In dev the SPA is served by Vite (hot module reload); only `/api/*` calls reach 
 ```mermaid
 flowchart LR
     subgraph stage1 [Stage 1: node:24]
-        F[npm ci + npm run build-only] --> dist[frontend/dist]
+        F[npm ci + npm run build-only] --> dist[shell/frontend/dist]
     end
     subgraph stage2 [Stage 2: dotnet/sdk:10.0]
         Bk[dotnet publish] --> pub[publish output]

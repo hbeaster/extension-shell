@@ -14,14 +14,14 @@ A web application: Vue 3 + Vite + TypeScript frontend, ASP.NET Core (.NET 10) ba
 Terminal 1 — backend:
 
 ```bash
-cd backend
+cd shell/backend
 dotnet run --project src/Shell.Api
 ```
 
 Terminal 2 — frontend (Vite proxies `/api` to the backend):
 
 ```bash
-cd frontend
+cd shell/frontend
 npm install
 npm run dev
 ```
@@ -32,13 +32,13 @@ Open http://localhost:5173.
 
 ```bash
 # frontend
-cd frontend
+cd shell/frontend
 npm run lint
 npm run test:unit -- --run
 npm run build
 
 # backend
-cd backend
+cd shell/backend
 dotnet test
 dotnet format --verify-no-changes
 ```
@@ -46,7 +46,7 @@ dotnet format --verify-no-changes
 ## Docker
 
 ```bash
-docker build -t shell .
+docker build -f shell/Dockerfile -t shell .
 docker run -p 8080:8080 shell
 # http://localhost:8080  (SPA), /api/hello, /healthz
 ```

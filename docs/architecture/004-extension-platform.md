@@ -32,7 +32,7 @@ Keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used as described in RF
 
 | Term | Meaning | Where it lives |
 | --- | --- | --- |
-| **Shell** | The Vue 3 SPA plus the ASP.NET Core API that serves it, built and deployed as one container. | `frontend/`, `backend/` |
+| **Shell** | The Vue 3 SPA plus the ASP.NET Core API that serves it, built and deployed as one container. | `shell/frontend/`, `shell/backend/` |
 | **Extension** | An independently built web component that plugs into the shell's sidebar and main view without changing the shell codebase. | One folder under `extensions/` |
 | **Manifest** | The extension's `extension.json`, declaring `{ id, name, tag }`. Authored by the extension team. | `extensions/<id>/extension.json` |
 | **Registry** | The static file listing all installed extensions. | `/extensions/registry.json` |
@@ -42,7 +42,7 @@ Keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used as described in RF
 | **Context attribute** | A `shell-` prefixed attribute the shell sets on the host element to convey ambient state. The shell's only channel into a mounted extension. | `shell-theme`, `shell-locale` |
 | **Assembler** | Shell-owned packaging tooling that validates manifests and aggregates independently built artifacts into the served layout. Extensions never invoke or depend on it. | `extensions/scripts/assemble.mjs` |
 | **Layered image** | The shell container image with built extension assets copied on top, produced by a second Docker build. | `Dockerfile.extensions` |
-| **Built-in tool** | A view that ships inside the shell codebase (dashboard, data, reports, settings), as opposed to an extension. | `frontend/src/views/` |
+| **Built-in tool** | A view that ships inside the shell codebase (dashboard, data, reports, settings), as opposed to an extension. | `shell/frontend/src/views/` |
 
 ## The platform at a glance
 
@@ -108,10 +108,10 @@ In production there is no extension-specific serving code at all. Extension asse
 Development adds a *second* static-file provider, overlaid at `RequestPath = "/extensions"` and sourced from the `Extensions:RootPath` configuration key, so the shell can serve locally built extensions without a container build. The path is resolved against the app's content root with `Path.GetFullPath`, and the mapping is double-guarded — the key must be non-blank **and** the directory must exist — so an unset key or a missing folder is a silent no-op rather than a startup failure. The key appears in exactly one file:
 
 ```json
-"Extensions": { "RootPath": "../../../extensions/dist" }
+"Extensions": { "RootPath": "../../../../extensions/dist" }
 ```
 
-Resolved relative to `backend/src/Shell.Api/`, this reaches the repository's `extensions/dist`. Forward slashes are used on all platforms.
+Resolved relative to `shell/backend/src/Shell.Api/`, this reaches the repository's `extensions/dist`. Forward slashes are used on all platforms.
 
 The Vite dev server proxies both `/api` and `/extensions` to the backend. This is what makes development and production resolve extension URLs identically, and it is the precondition for the registry to contain absolute paths like `/extensions/buzzer/buzzer.js` that work unchanged in both environments.
 
@@ -141,7 +141,7 @@ One consequence worth stating because it generates bug reports otherwise: since 
 | `CONSUMPTION-05` | The shell MUST fetch `/extensions/registry.json` once at application startup and hold the result in the extensions store for the lifetime of the session. |
 | `CONSUMPTION-06` | A registry response MUST be treated as valid only if the HTTP status is OK, the `Content-Type` includes `application/json`, and the parsed body contains an `extensions` array. The content-type check is REQUIRED because the SPA fallback answers missing files with `index.html` and HTTP 200, so status alone is not a reliable signal. |
 | `CONSUMPTION-07` | Every discovery failure — network error, non-OK status, wrong content type, unparseable body, or missing `extensions` array — MUST resolve to an empty extension list. The shell MUST NOT surface an error to the user for an absent or invalid registry: running with zero extensions is a normal state. |
-| `CONSUMPTION-08` | Registry access MUST live in `frontend/src/services/extensions.ts`, not `services/api.ts`. The two have deliberately different failure semantics: `api.ts` throws on error for `/api/*` endpoints; the registry soft-fails to an empty list. |
+| `CONSUMPTION-08` | Registry access MUST live in `shell/frontend/src/services/extensions.ts`, not `services/api.ts`. The two have deliberately different failure semantics: `api.ts` throws on error for `/api/*` endpoints; the registry soft-fails to an empty list. |
 
 ### Presentation, mounting, and teardown
 
@@ -200,7 +200,7 @@ One line deserves emphasis because it is a containment property rather than a co
 
 ```mermaid
 flowchart LR
-    subgraph shellBuild [Dockerfile - three stages, zero extension references]
+    subgraph shellBuild [shell/Dockerfile - three stages, zero extension references]
         FE[node:24-alpine<br/>npm ci + npm run build-only] --> SB[dotnet/sdk:10.0<br/>dotnet publish -c Release]
         SB --> SI[dotnet/aspnet:10.0<br/>shell image - runs standalone]
     end
@@ -215,7 +215,7 @@ flowchart LR
     FI -.deployed unchanged by.-> H[Helm chart<br/>only image.repository and image.tag change]
 ```
 
-The shell `Dockerfile` contains zero extension references. It builds the SPA in a Node stage, publishes the API in a .NET SDK stage, and assembles both into an ASP.NET runtime image that runs correctly standalone — with no `/extensions` files present, the registry fetch soft-fails and the sidebar shows only built-in tools. `Dockerfile.extensions` declares `ARG SHELL_IMAGE` *before* its first `FROM` so the base image is parameterizable, builds every extension in a Node stage by copying `extensions/` wholesale and running the shell's build script, then does a single `COPY --from` of the assembled output into `wwwroot/extensions` on top of the shell image. It re-declares no entrypoint, port, environment, or user; all are inherited. The copy runs as root, so assets land root-owned and world-readable, which is correct for read-only static files served by the unprivileged runtime user.
+The shell `shell/Dockerfile` contains zero extension references. It builds the SPA in a Node stage, publishes the API in a .NET SDK stage, and assembles both into an ASP.NET runtime image that runs correctly standalone — with no `/extensions` files present, the registry fetch soft-fails and the sidebar shows only built-in tools. `Dockerfile.extensions` declares `ARG SHELL_IMAGE` *before* its first `FROM` so the base image is parameterizable, builds every extension in a Node stage by copying `extensions/` wholesale and running the shell's build script, then does a single `COPY --from` of the assembled output into `wwwroot/extensions` on top of the shell image. It re-declares no entrypoint, port, environment, or user; all are inherited. The copy runs as root, so assets land root-owned and world-readable, which is correct for read-only static files served by the unprivileged runtime user.
 
 The Kubernetes story is the adoption argument, so it is worth stating flatly. The Helm chart has no volumes, no volume mounts, no init containers, no ConfigMap or Secret, no sidecar, and no environment override for the extensions path. The Deployment renders its image from `image.repository` and `image.tag` (falling back to the chart's `appVersion`), probes `/healthz` for both liveness and readiness, and the optional Ingress needs no separate `/extensions` rule because one container serves the SPA, the API, and the extensions from the same origin. **Shipping extensions is a two-value change** — point the repository and tag at the layered image and deploy.
 
@@ -235,35 +235,35 @@ Nineteen files in the shell repository have any awareness that extensions exist:
 
 | File | Role for extensions | Extension-relevant contents |
 | --- | --- | --- |
-| `backend/src/Shell.Api/appsettings.json` | Production baseline | **No `Extensions` section at all.** Only logging levels and `AllowedHosts`. Production requires no extension configuration, which is what `CONSUMPTION-03` guarantees. |
-| `backend/src/Shell.Api/appsettings.Development.json` | The only file where `Extensions:RootPath` may appear | `"Extensions": { "RootPath": "../../../extensions/dist" }` — forward slashes, resolved against the content root (`backend/src/Shell.Api/`) to reach the repository's `extensions/dist`. |
-| `backend/src/Shell.Api/Program.cs` | Code, but it *is* the serving configuration | `UseDefaultFiles()` + `UseStaticFiles()` serve `wwwroot`, including `wwwroot/extensions`, in production. A dev-only overlay then reads `Extensions:RootPath`, guards on non-blank **and** directory-exists, resolves it against the content root, and adds a second static-file provider at `RequestPath = "/extensions"`. `MapFallbackToFile("index.html")` closes the pipeline — the behaviour `CONSUMPTION-06` compensates for. (The partial `Program` declaration exists so integration tests can boot the app.) |
-| `frontend/vite.config.ts` | Development URL parity | `server.proxy` forwards **both** `/api` and `/extensions` to the backend. No custom-element compiler option is needed anywhere, because the shell never compiles an extension tag in a template — elements are created imperatively. No build, define, or bundler-externals configuration relates to extensions. |
-| `frontend/vitest.config.ts` | Test environment | Merges the Vite config, runs in a DOM environment. Tests resolve extension URLs the same way the dev server does. |
+| `shell/backend/src/Shell.Api/appsettings.json` | Production baseline | **No `Extensions` section at all.** Only logging levels and `AllowedHosts`. Production requires no extension configuration, which is what `CONSUMPTION-03` guarantees. |
+| `shell/backend/src/Shell.Api/appsettings.Development.json` | The only file where `Extensions:RootPath` may appear | `"Extensions": { "RootPath": "../../../../extensions/dist" }` — forward slashes, resolved against the content root (`shell/backend/src/Shell.Api/`) to reach the repository's `extensions/dist`. |
+| `shell/backend/src/Shell.Api/Program.cs` | Code, but it *is* the serving configuration | `UseDefaultFiles()` + `UseStaticFiles()` serve `wwwroot`, including `wwwroot/extensions`, in production. A dev-only overlay then reads `Extensions:RootPath`, guards on non-blank **and** directory-exists, resolves it against the content root, and adds a second static-file provider at `RequestPath = "/extensions"`. `MapFallbackToFile("index.html")` closes the pipeline — the behaviour `CONSUMPTION-06` compensates for. (The partial `Program` declaration exists so integration tests can boot the app.) |
+| `shell/frontend/vite.config.ts` | Development URL parity | `server.proxy` forwards **both** `/api` and `/extensions` to the backend. No custom-element compiler option is needed anywhere, because the shell never compiles an extension tag in a template — elements are created imperatively. No build, define, or bundler-externals configuration relates to extensions. |
+| `shell/frontend/vitest.config.ts` | Test environment | Merges the Vite config, runs in a DOM environment. Tests resolve extension URLs the same way the dev server does. |
 
 **Packaging and deployment configuration**
 
 | File | Role for extensions | Extension-relevant contents |
 | --- | --- | --- |
-| `Dockerfile` | Builds the shell image | **Zero extension references.** Node build stage → .NET SDK publish stage → ASP.NET runtime image with the SPA in `./wwwroot`, listening on `:8080` as an unprivileged user. Produces an image that runs correctly with no extensions installed. |
+| `shell/Dockerfile` | Builds the shell image | **Zero extension references.** Node build stage → .NET SDK publish stage → ASP.NET runtime image with the SPA in `./wwwroot`, listening on `:8080` as an unprivileged user. Produces an image that runs correctly with no extensions installed. |
 | `Dockerfile.extensions` | Builds the layered image | `ARG SHELL_IMAGE` declared **before** the first `FROM`, defaulting to the local shell image and overridable per build. Build stage copies `extensions/` wholesale and runs the shell's build script — no per-extension `COPY` list, at the accepted cost of no cross-build dependency-layer caching. Final stage is one `COPY --from` into `/app/wwwroot/extensions`, inheriting entrypoint, port, environment, and user. |
 | `.dockerignore` | Guarantees builds come from source | Excludes `extensions/dist/`, `extensions/*/dist/`, and both `node_modules` scopes, so no host-built artifact can enter the image. |
 | `helm/shell/Chart.yaml` | Default image tag | `appVersion` is the fallback used when `image.tag` is left empty. A real deployment of a layered image sets an explicit tag or bumps this. |
 | `helm/shell/values.yaml` | **The entire deployment knob set for extensions** | `image.repository` and `image.tag` — that is the whole surface. Everything else (replicas, service type and ports, ingress toggle, resources, probe paths, env list) is identical for the plain and layered images. |
 | `helm/shell/templates/deployment.yaml` | Renders the pod | Image from repository plus tag-or-`appVersion`; container port from the service's target port; both probes on `/healthz`. **No volumes, volume mounts, init containers, ConfigMap, Secret, sidecar, or extensions-path environment override.** |
 | `helm/shell/templates/ingress.yaml` | Optional external access | Gated on a values toggle; a single rule routing `/` to the service. No `/extensions` rule is needed — one container serves the SPA, the API, and the extensions. |
-| `frontend/src/services/extensions.ts` | Registry access boundary | Listed here because `CONSUMPTION-08` makes its *location* normative. Declares the five-field manifest entry type, the soft-failing registry fetch, and the dynamic module loader (kept as an indirection so tests can substitute it). |
+| `shell/frontend/src/services/extensions.ts` | Registry access boundary | Listed here because `CONSUMPTION-08` makes its *location* normative. Declares the five-field manifest entry type, the soft-failing registry fetch, and the dynamic module loader (kept as an indirection so tests can substitute it). |
 
 **Shell implementation touch points.** Not configuration, but the complete set of shell source files that participate in the extension path:
 
 | File | Responsibility |
 | --- | --- |
-| `frontend/src/stores/extensions.ts` | Holds the registry for the session; exposes lookup by `id`. |
-| `frontend/src/App.vue` | Triggers the single startup registry load. |
-| `frontend/src/router/index.ts` | Declares `/ext/:id` ahead of the catch-all redirect. |
-| `frontend/src/views/ExtensionHostView.vue` | Import, create, listen, insert; in-view errors; symmetric teardown. |
-| `frontend/src/components/AppSidebar.vue` | Renders extension entries after built-in tools, icon as a plain image. |
-| `frontend/src/components/AppModal.vue` | The modal opened in response to `shell:notify`. |
+| `shell/frontend/src/stores/extensions.ts` | Holds the registry for the session; exposes lookup by `id`. |
+| `shell/frontend/src/App.vue` | Triggers the single startup registry load. |
+| `shell/frontend/src/router/index.ts` | Declares `/ext/:id` ahead of the catch-all redirect. |
+| `shell/frontend/src/views/ExtensionHostView.vue` | Import, create, listen, insert; in-view errors; symmetric teardown. |
+| `shell/frontend/src/components/AppSidebar.vue` | Renders extension entries after built-in tools, icon as a plain image. |
+| `shell/frontend/src/components/AppModal.vue` | The modal opened in response to `shell:notify`. |
 
 **Deliberately not configured.** For a platform rollout the persuasive content is what is absent, so each of these is stated rather than left to be noticed:
 
@@ -272,7 +272,7 @@ Nineteen files in the shell repository have any awareness that extensions exist:
 - No volumes, init containers, ConfigMaps, or sidecars — extensions are baked into an image, never mounted at runtime.
 - No `/extensions` ingress rule, because there is only one origin.
 - No API controller, route, or middleware for extension discovery or delivery.
-- No extension name anywhere in the `Dockerfile`, the Helm chart, or the router.
+- No extension name anywhere in the `shell/Dockerfile`, the Helm chart, or the router.
 
 ## Part B — How extensions are packaged
 
@@ -298,7 +298,7 @@ extensions/buzzer/
 
 An extension is one fully standalone folder directly under `extensions/`, with its own `package.json`, its own committed `package-lock.json`, and its own `node_modules`. There are no npm workspaces anywhere in this repository, and an extension must not be part of one: no shared install, no hoisted dependencies, no root lockfile. Running `npm ci && npm run build` inside the folder on a clean checkout must succeed and produce `dist/<id>.js` without referencing anything outside the folder.
 
-The only required script is `build`. What it does beyond emitting the bundle is the author's business — the reference extensions run a bare Vite build with no separate type-check step, unlike the shell frontend, and nothing in the contract cares. There is no registration step anywhere: no manifest list to append to, no workspace entry, no `Dockerfile` edit, and no Helm change. Adding an extension is adding a folder.
+The only required script is `build`. What it does beyond emitting the bundle is the author's business — the reference extensions run a bare Vite build with no separate type-check step, unlike the shell frontend, and nothing in the contract cares. There is no registration step anywhere: no manifest list to append to, no workspace entry, no `shell/Dockerfile` edit, and no Helm change. Adding an extension is adding a folder.
 
 **Normative rules**
 
@@ -426,7 +426,7 @@ Two mechanical details are not stated as rules in either standard because they a
 
 | ID | Requirement |
 | --- | --- |
-| `EXT-20` | An extension MUST NOT import code from `frontend/` or depend on the shell's framework or bundler versions. The manifest fields and the two vocabularies above are the entire contract. |
+| `EXT-20` | An extension MUST NOT import code from `shell/frontend/` or depend on the shell's framework or bundler versions. The manifest fields and the two vocabularies above are the entire contract. |
 | `EXT-21` | An extension MUST NOT be aware of, discover, address, communicate with, or depend on any other extension: no imports of another extension's code or types, no events aimed at another extension, no fetching `/extensions/registry.json` or otherwise enumerating installed extensions, and no assuming any other extension is (or is not) installed. Each extension behaves as if it were the only one installed. |
 
 That last sentence is the one to remember: **each extension behaves as if it were the only one installed.** Enumeration is banned as explicitly as communication — an extension may not fetch the registry to find out who else is present, which keeps the installed set knowable only to the shell and makes any deployment combination safe by construction.
@@ -508,7 +508,7 @@ Then:
 3. Build in isolation: `npm ci && npm run build`, which produces `dist/my-tool.js`.
 4. From `extensions/`, run `node scripts/build-all.mjs` to build every extension and assemble the served layout.
 
-There is no fifth step. No registration list, no workspace entry, no `Dockerfile` edit, no Helm change, and no coordination with any other extension team.
+There is no fifth step. No registration list, no workspace entry, no `shell/Dockerfile` edit, no Helm change, and no coordination with any other extension team.
 
 ## Change control — how the contract widens
 

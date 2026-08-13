@@ -11,7 +11,7 @@ The shell is maintained by a core team, but other teams need to ship additional 
 
 ## Decision
 
-Extensions are **custom elements (web components)** authored with Vue's `defineCustomElement`, each built by its own Vite lib-mode build into a self-contained ES module (Vue runtime bundled per extension, ~29 KB gzip). They live in an `extensions/` npm workspace, sibling to `frontend/` and `backend/`.
+Extensions are **custom elements (web components)** authored with Vue's `defineCustomElement`, each built by its own Vite lib-mode build into a self-contained ES module (Vue runtime bundled per extension, ~29 KB gzip). They live in an `extensions/` npm workspace at the repository root, sibling to the `shell/` application rather than inside it.
 
 Discovery is a **static `registry.json`** at `/extensions/registry.json`, assembled at build time by `extensions/scripts/assemble.mjs` from per-extension `extension.json` manifests (`{ id, name, tag }`; `id` matches the folder, `tag` is `ext-` prefixed and unique — the script fails the build otherwise). Each entry resolves to `module` and `icon` URLs under `/extensions/<id>/`.
 
@@ -19,7 +19,7 @@ Delivery is a **layered Docker image**: `Dockerfile.extensions` builds the works
 
 The shell fetches the registry at startup into a Pinia store, appends sidebar entries after the built-in tools, and hosts extensions at `/ext/:id`, where it dynamically imports the module and creates the custom element. Extensions talk to the shell only via DOM `CustomEvent`s dispatched on their host element (currently `shell:notify`, which opens a shell modal).
 
-The registry fetch lives in `frontend/src/services/extensions.ts`, not `services/api.ts`: `api.ts`'s contract is `/api/*` endpoints with throw-on-error semantics, while the registry is a static asset whose absence is a normal state (soft-fail to an empty list). The SPA fallback answers missing files with `index.html` and HTTP 200, so the service validates the response content type before parsing.
+The registry fetch lives in `shell/frontend/src/services/extensions.ts`, not `services/api.ts`: `api.ts`'s contract is `/api/*` endpoints with throw-on-error semantics, while the registry is a static asset whose absence is a normal state (soft-fail to an empty list). The SPA fallback answers missing files with `index.html` and HTTP 200, so the service validates the response content type before parsing.
 
 ## Considered alternatives
 
