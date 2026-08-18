@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ExtensionHostView from '../ExtensionHostView.vue'
-import { loadExtensionModule, type ExtensionManifest } from '@/services/extensions'
+import { loadExtensionModule, type ExtensionDescriptor } from '@/services/extensions'
 import { useExtensionsStore } from '@/stores/extensions'
 import { useShellContextStore } from '@/stores/shellContext'
 
@@ -27,13 +27,32 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: routeParams }),
 }))
 
-const manifests: ExtensionManifest[] = [
+const descriptors: ExtensionDescriptor[] = [
   {
     id: 'smiley-face',
-    name: 'Smiley Face',
+    name: 'ext-smiley-face',
+    displayName: 'Smiley Face',
+    version: '1.0.0',
+    type: 'WebComponent',
     tag: 'ext-smiley-face',
-    module: '/extensions/smiley-face/smiley-face.js',
+    module: '/extensions/smiley-face/extension.js',
     icon: '/extensions/smiley-face/icon.svg',
+    discovery: null,
+    services: null,
+  },
+  // Its bundle imports cleanly but never defines <ext-ghost>, the failure a
+  // tag typo in package.json produces.
+  {
+    id: 'ghost',
+    name: 'ext-ghost',
+    displayName: 'Ghost',
+    version: '1.0.0',
+    type: 'WebComponent',
+    tag: 'ext-ghost',
+    module: '/extensions/ghost/extension.js',
+    icon: '/extensions/ghost/icon.svg',
+    discovery: null,
+    services: null,
   },
 ]
 
@@ -62,7 +81,7 @@ describe('ExtensionHostView', () => {
   function mountView() {
     const store = useExtensionsStore()
     const shellContext = useShellContextStore()
-    store.extensions = manifests
+    store.extensions = descriptors
     store.loaded = true
     wrapper = mount(ExtensionHostView, { attachTo: document.body })
     return { store, shellContext, wrapper }
@@ -72,7 +91,7 @@ describe('ExtensionHostView', () => {
     mountView()
     await flushPromises()
 
-    expect(loadExtensionModule).toHaveBeenCalledWith('/extensions/smiley-face/smiley-face.js')
+    expect(loadExtensionModule).toHaveBeenCalledWith('/extensions/smiley-face/extension.js')
     const element = document.body.querySelector('ext-smiley-face')
     expect(element).not.toBeNull()
   })
@@ -109,6 +128,18 @@ describe('ExtensionHostView', () => {
     expect(wrapper!.find('[data-testid="extension-error"]').text()).toContain(
       'Failed to load "Smiley Face"',
     )
+  })
+
+  it('shows an error when the module registers no element for the manifest tag', async () => {
+    routeParams.id = 'ghost'
+    vi.mocked(loadExtensionModule).mockResolvedValue(undefined)
+    mountView()
+    await flushPromises()
+
+    expect(wrapper!.find('[data-testid="extension-error"]').text()).toContain(
+      '"Ghost" did not register <ext-ghost>',
+    )
+    expect(document.body.querySelector('ext-ghost')).toBeNull()
   })
 
   it('sets context attributes before inserting the element', async () => {

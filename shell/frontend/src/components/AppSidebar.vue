@@ -50,7 +50,7 @@ const tools: Tool[] = [
         class="tool-link"
       >
         <img :src="ext.icon" class="icon" alt="" />
-        <span class="label">{{ ext.name }}</span>
+        <span class="label">{{ ext.displayName }}</span>
       </RouterLink>
     </nav>
 

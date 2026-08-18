@@ -48,7 +48,7 @@ dotnet format --verify-no-changes
 ```bash
 docker build -f shell/Dockerfile -t shell .
 docker run -p 8080:8080 shell
-# http://localhost:8080  (SPA), /api/hello, /healthz
+# http://localhost:8080  (SPA), /api/hello, /api/extensions, /healthz
 ```
 
 > Troubleshooting: if pulls from `mcr.microsoft.com` fail with `EOF`, the IPv6 route to Microsoft's registry may be broken on your network. Pull the `dotnet/sdk:10.0` and `dotnet/aspnet:10.0` images by another means (e.g. skopeo) and build with `--pull=false`.
@@ -68,8 +68,9 @@ Three supported modes (ADR 0009, ADR 0010). **Layered image** is the default —
 `shell-ext` with `Dockerfile.extensions` and point `image.repository`/`image.tag` at it.
 
 **Mounted volume (PVC)** ships extensions independently of the shell image. Publish the
-assembled dist — `registry.json` plus one folder per extension, exactly what
-`node scripts/build-all.mjs` writes to `extensions/dist/` — to a volume, then:
+assembled dist — one folder per extension holding `package.json`, `extension.js`, and
+`icon.svg`, exactly what `node scripts/build-all.mjs` writes to `extensions/dist/` — to a
+volume, then:
 
 ```bash
 kubectl apply -f helm/shell/examples/extensions-pvc.yaml
@@ -104,6 +105,10 @@ It is mounted read-only over `/app/wwwroot/extensions` and needs no shell config
 > Use the plain `shell` image in this mode: the mount shadows extensions baked into a layered
 > image. A missing or empty volume is not an error — the sidebar simply shows only built-in
 > tools. Check with `kubectl exec deploy/shell -- ls /app/wwwroot/extensions`.
+>
+> The folder contents *are* the configuration (ADR 0012), so whatever populates the volume
+> must clear it first: a folder left behind by a removed extension is still discovered and
+> still appears in the sidebar.
 
 ## Documentation
 

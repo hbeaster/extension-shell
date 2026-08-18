@@ -1,10 +1,15 @@
 {
   "name": "ext-smiley-face",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build"
+  },
+  "bc-extension": {
+    "type": "WebComponent",
+    "displayName": "Smiley Face",
+    "tag": "ext-smiley-face"
   },
   "dependencies": {
     "vue": "^3.5.40"

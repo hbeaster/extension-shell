@@ -1,17 +1,17 @@
 # STD 001 — Extension Consumption by the Shell
 
 Status: Active
-Version: 1.4.0
-Date: 2026-08-17
-Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md), [0010](../adr/0010-image-volume-extension-delivery.md), [0011](../adr/0011-remove-hostpath-extension-delivery.md)
+Version: 2.0.0
+Date: 2026-08-18
+Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md), [0010](../adr/0010-image-volume-extension-delivery.md), [0011](../adr/0011-remove-hostpath-extension-delivery.md), [0012](../adr/0012-filesystem-scanned-extension-discovery.md)
 
 ## 1. Purpose and scope
 
 This standard defines how the shell discovers, serves, presents, loads, and tears down
-extensions. It covers the registry contract, the backend serving model, the sidebar and
-routing integration, the host-view lifecycle, the context attributes the shell writes to
-a mounted extension, and the two supported delivery modes (layered image and mounted
-volume).
+extensions. It covers the discovery endpoint contract, the backend serving model, the
+sidebar and routing integration, the host-view lifecycle, the context attributes the shell
+writes to a mounted extension, and the two supported delivery modes (layered image and
+mounted volume).
 
 It does not cover how extensions themselves are built or how they communicate with the
 shell — that is [STD 002](./002-extension-authoring-and-communication.md). The two
@@ -36,13 +36,18 @@ all capitals, as shown here.
   as one container.
 - **Extension** — an independently built web component that plugs into the shell's
   sidebar and main view without changing the shell codebase.
-- **Registry** — the static file `/extensions/registry.json` listing all installed
-  extensions.
-- **Manifest entry** — one object in the registry's `extensions` array:
-  `{ id, name, tag, module, icon }`, where `module` and `icon` are URLs under
-  `/extensions/<id>/`.
+- **Extensions root** — the directory holding one folder per installed extension. Its
+  contents are the configuration; nothing else declares what is installed.
+- **Extension catalog** — the backend component that scans the extensions root and
+  produces the descriptor list served by the discovery endpoint.
+- **Extension descriptor** — one object in the discovery response's `extensions` array:
+  `{ id, name, displayName, version, type, tag, module, icon, discovery, services }`,
+  where `module` and `icon` are URLs under `/extensions/<id>/`. Assembled by the catalog
+  from the extension's own manifest; see CONSUMPTION-20.
+- **Extension manifest** — the `bc-extension` section of an extension's `package.json`,
+  defined normatively in [STD 002](./002-extension-authoring-and-communication.md) §5.2.
 - **Extension Module** — the extension's self-contained ES module at the `module` URL.
-- **Host element** — the DOM element the shell creates from a manifest entry's `tag` and
+- **Host element** — the DOM element the shell creates from a descriptor's `tag` and
   mounts inside the extension host view.
 - **Context attribute** — a `shell-` prefixed attribute the shell sets on the host
   element to convey ambient state (currently `shell-theme` and `shell-locale`). The
@@ -54,54 +59,84 @@ all capitals, as shown here.
 
 ### 5.1 Serving
 
-- **CONSUMPTION-01** — The registry and all extension assets MUST be served as static files under
-  `/extensions/`. No API controller or other backend code MUST be involved in extension
-  discovery or delivery.
-- **CONSUMPTION-02** — In production, extension assets MUST be served from `wwwroot/extensions`.
+- **CONSUMPTION-01** — All extension assets — bundles, icons, and manifests — MUST be served
+  as static files under `/extensions/`; no backend code MUST be involved in delivering
+  them. Discovery is the one exception: the list of installed extensions MUST come from
+  `GET /api/extensions`, and that endpoint MUST derive it solely from the contents of the
+  extensions root, never from a checked-in or generated index file.
+- **CONSUMPTION-02** — In production, the extensions root MUST be `wwwroot/extensions`.
   The path is fixed; the source MAY be either assets baked into the image or a volume
   mounted over that path (see CONSUMPTION-15 and CONSUMPTION-19). The shell image itself
-  MUST NOT contain extensions in either mode.
-- **CONSUMPTION-03** — For local development, the backend MAY map `/extensions` to an external
-  directory via the `Extensions:RootPath` configuration key. This key MUST only be set in
-  Development configuration (`appsettings.Development.json`), and the application MUST
-  start and serve normally when the key is unset or the directory does not exist.
+  MUST NOT contain extensions in either mode. The discovery scan and the static-file
+  middleware MUST resolve the same root, through one shared code path, so a descriptor's
+  asset URLs can never point somewhere the server does not serve.
+- **CONSUMPTION-03** — For local development, the backend MAY point the extensions root at an
+  external directory via the `Extensions:RootPath` configuration key, which governs both
+  static serving and the discovery scan. This key MUST only be set in Development
+  configuration (`appsettings.Development.json`), and the application MUST start and serve
+  normally when the key is unset or the directory does not exist.
 - **CONSUMPTION-04** — The frontend dev server MUST proxy `/extensions` (alongside `/api`) to the
   backend so that development and production resolve extension URLs identically.
 
 ### 5.2 Discovery
 
-- **CONSUMPTION-05** — The shell MUST fetch `/extensions/registry.json` once at application
-  startup and hold the result in the extensions store for the lifetime of the session.
-- **CONSUMPTION-06** — A registry response MUST be treated as valid only if the HTTP status is
-  OK, the `Content-Type` includes `application/json`, and the parsed body contains an
-  `extensions` array. The content-type check is REQUIRED because the SPA fallback answers
-  missing files with `index.html` and HTTP 200, so status alone is not a reliable signal.
-- **CONSUMPTION-07** — Every discovery failure — network error, non-OK status, wrong content
-  type, unparseable body, or missing `extensions` array — MUST resolve to an empty
-  extension list. The shell MUST NOT surface an error to the user for an absent or
-  invalid registry: running with zero extensions is a normal state.
-- **CONSUMPTION-08** — Registry access MUST live in `shell/frontend/src/services/extensions.ts`, not
-  `services/api.ts`. The two have deliberately different failure semantics: `api.ts`
-  throws on error for `/api/*` endpoints; the registry soft-fails to an empty list.
+- **CONSUMPTION-05** — The shell MUST call `GET /api/extensions` once at application startup
+  and hold the result in the extensions store for the lifetime of the session.
+- **CONSUMPTION-06** — The endpoint MUST rescan the extensions root on every request and MUST
+  NOT cache its result, so that a volume replaced under a running pod, or a dist rebuilt
+  beside a running dev server, takes effect without a restart. Responses MUST be marked
+  non-cacheable. It MUST answer HTTP 200 with `{ "extensions": [...] }` sorted by `id`,
+  including when the root is absent or empty. A folder that cannot be read or does not
+  describe a usable extension MUST be omitted and logged, never fail the response; an
+  extension whose `type` the shell cannot host MUST likewise be omitted and logged. One
+  malformed folder MUST NOT cost the intact ones their entries.
+- **CONSUMPTION-07** — Every client-side discovery failure — network error, non-OK status,
+  wrong content type, unparseable body, or missing `extensions` array — MUST resolve to an
+  empty extension list. The shell MUST NOT surface an error to the user for absent or
+  invalid discovery data: running with zero extensions is a normal state. The content-type
+  check is REQUIRED: an SPA bundle newer than the backend serving it has no
+  `/api/extensions` route, so the request falls through to `index.html` with HTTP 200 and
+  status alone is not a reliable signal.
+- **CONSUMPTION-08** — Discovery access MUST live in `shell/frontend/src/services/extensions.ts`,
+  not `services/api.ts`, even though it now calls an `/api/*` endpoint. The two have
+  deliberately different failure semantics: `api.ts` throws on error, and its callers
+  render an error state; discovery is called from `App.vue`'s `onMounted` with nothing to
+  catch a rejection, and soft-fails to an empty list. See ADR 0012.
+- **CONSUMPTION-20** — A descriptor MUST carry
+  `{ id, name, displayName, version, type, tag, module, icon, discovery, services }`.
+  `id` is the extension's folder name and is both the URL segment `/extensions/<id>/` and
+  the route segment `/ext/<id>`; it is not a manifest field. `name` and `version` are the
+  package's top-level fields; `displayName` is the manifest's, falling back to `name` when
+  absent. `module` and `icon` MUST be absolute URLs under `/extensions/<id>/`, derived from
+  plain file names that default to `extension.js` and `icon.svg`; a manifest naming a
+  `module` or `icon` outside its own folder MUST be rejected, not resolved.
+  `discovery` and `services` MUST be carried verbatim from the manifest and exposed to the
+  shell, and MUST NOT gate loading: the shell mounts a hostable extension whether or not
+  its declared requirements can be satisfied. Enforcing them REQUIRES a new accepted ADR,
+  per CONSUMPTION-16.
 
 ### 5.3 Presentation
 
-- **CONSUMPTION-09** — The sidebar MUST render one entry per registry entry, using the manifest
-  `name` and `icon`, linking to `/ext/<id>`. Extension entries MUST appear after the
-  built-in tools, in registry order (the registry is sorted by `id` at assembly time).
+- **CONSUMPTION-09** — The sidebar MUST render one entry per descriptor, using `displayName`
+  and `icon`, linking to `/ext/<id>`. Extension entries MUST appear after the built-in
+  tools, in the order the endpoint returns them (sorted by `id`, per CONSUMPTION-06).
 - **CONSUMPTION-10** — The `/ext/:id` route MUST be a single generic host view. Unknown ids MUST
   be handled inside that view (see CONSUMPTION-12), not by the router's catch-all redirect.
 
 ### 5.4 Loading and lifecycle
 
-- **CONSUMPTION-11** — To mount an extension, the host view MUST: dynamically import the manifest
-  `module` URL (registering the custom element is a side effect of the import), create
-  the host element with `document.createElement(tag)` using the manifest `tag`, set the
-  current context attributes on it (see CONSUMPTION-17), attach its event listeners to
-  the host element, and only then insert it into the DOM. Context attributes MUST be set
-  before insertion so the extension has its context at first render.
-- **CONSUMPTION-12** — An unknown extension id or a failed module import MUST render an in-view
-  error message and MUST NOT mount an element or navigate away.
+- **CONSUMPTION-11** — To mount an extension, the host view MUST: dynamically import the
+  descriptor's `module` URL (registering the custom element is a side effect of the
+  import), create the host element with `document.createElement(tag)` using the
+  descriptor's `tag`, set the current context attributes on it (see CONSUMPTION-17),
+  attach its event listeners to the host element, and only then insert it into the DOM.
+  Context attributes MUST be set before insertion so the extension has its context at
+  first render.
+- **CONSUMPTION-12** — An unknown extension id, a failed module import, or a module that
+  imports without registering the descriptor's `tag` MUST render an in-view error message
+  and MUST NOT mount an element or navigate away. The registration check is REQUIRED
+  because nothing at packaging time can verify the tag a bundle registers, and without it
+  a mismatch renders a silently inert element instead of an error.
 - **CONSUMPTION-13** — On route change and on unmount, the host view MUST tear down completely:
   remove its event listeners from the host element and remove the element from the DOM.
 - **CONSUMPTION-14** — The shell MUST listen for extension events only on the host element it
@@ -133,19 +168,23 @@ all capitals, as shown here.
     changing the Helm chart beyond pointing `image.repository`/`image.tag` at the layered
     image.
   - **Mounted volume** — an assembled dist is mounted over `wwwroot/extensions` in the pod,
-    per CONSUMPTION-19.
+    per CONSUMPTION-19. An assembled dist is one folder per extension and nothing else;
+    it contains no index or registry file.
 
   The two modes MUST NOT be combined: a volume mounted over `wwwroot/extensions` shadows
   assets baked into a layered image, making them unreachable with no diagnostic. Mount mode
   MUST use the plain shell image.
-- **CONSUMPTION-19** — A mounted extension volume MUST contain an assembled dist —
-  `registry.json` plus one folder per extension, as produced by
-  `extensions/scripts/assemble.mjs` — mounted read-only. The shell MUST serve it with no
+- **CONSUMPTION-19** — A mounted extension volume MUST contain an assembled dist — one folder
+  per extension, each holding a `package.json` with a `bc-extension` section, its module,
+  and its icon, as produced by `extensions/scripts/assemble.mjs` — mounted read-only. No
+  registry or index file exists, and none MUST be required. The shell MUST serve it with no
   additional configuration: the mount path is the shell's existing static-asset path, and
   `Extensions:RootPath` MUST NOT be used for this purpose (it remains Development-only per
-  CONSUMPTION-03). An absent, empty, or malformed volume MUST degrade to zero extensions
-  per CONSUMPTION-07, never a startup failure. Assembling or merging a registry inside the
-  cluster MUST NOT be required; the registry is a build-time artifact.
+  CONSUMPTION-03). An absent or empty volume MUST degrade to zero extensions, and a
+  partially malformed one MUST degrade per folder (CONSUMPTION-06), never a startup
+  failure. Because the folders themselves are the configuration, a stale folder is served
+  and listed rather than ignored: a process that populates the volume MUST clear the target
+  before copying, or removed extensions reappear at whatever version was last written.
 - **CONSUMPTION-16** — Widening the shell/extension contract (new events, payloads, props, shared
   services, theming, a shell-to-extension channel) REQUIRES a new accepted ADR before any
   implementation, per ADR 0006.
@@ -155,9 +194,17 @@ all capitals, as shown here.
 The requirements above are implemented and tested here:
 
 - Serving: `shell/backend/src/Shell.Api/Program.cs` (static-file middleware,
-  `Extensions:RootPath` guard), `shell/backend/src/Shell.Api/appsettings.Development.json`,
-  `shell/frontend/vite.config.ts` (dev proxy).
-- Discovery: `shell/frontend/src/services/extensions.ts` (soft-fail cases),
+  `Extensions:RootPath` guard), `shell/backend/src/Shell.Api/ExtensionCatalog/ExtensionsRoot.cs`
+  (the one root resolution both the middleware and the scan use),
+  `shell/backend/src/Shell.Api/appsettings.Development.json`,
+  `shell/frontend/vite.config.ts` (dev proxy — `/api` and `/extensions`, both still needed).
+- Discovery, backend: `shell/backend/src/Shell.Api/ExtensionCatalog/FileSystemExtensionCatalog.cs`
+  (the scan and its skip-and-log rules),
+  `shell/backend/src/Shell.Api/ExtensionCatalog/ExtensionDescriptor.cs` (the wire shape),
+  `shell/backend/src/Shell.Api/Controllers/ExtensionsController.cs`; behavior specified in
+  `shell/backend/tests/Shell.Api.Tests/ExtensionCatalogTests.cs` and
+  `ExtensionsEndpointTests.cs`.
+- Discovery, frontend: `shell/frontend/src/services/extensions.ts` (soft-fail cases),
   `shell/frontend/src/stores/extensions.ts`, `shell/frontend/src/App.vue` (startup load);
   behavior specified in `shell/frontend/src/services/__tests__/extensions.spec.ts`.
 - Presentation: `shell/frontend/src/components/AppSidebar.vue`,
@@ -190,25 +237,32 @@ The requirements above are implemented and tested here:
 
 A shell change touching the extension path conforms to this standard when:
 
-- [ ] Extension assets are still served purely statically (CONSUMPTION-01…CONSUMPTION-04).
-- [ ] The registry fetch still soft-fails to an empty list in all five failure cases,
-      covered by the service tests (CONSUMPTION-05…CONSUMPTION-08).
-- [ ] Sidebar ordering and the generic `/ext/:id` host are preserved (CONSUMPTION-09, CONSUMPTION-10).
-- [ ] Mount and teardown follow the import → create → set attributes → listen → insert /
-      remove-listener → remove-element sequence, covered by the host-view tests
+- [ ] Extension assets are still served purely statically, and the scan and the static-file
+      middleware still resolve one shared root (CONSUMPTION-01…CONSUMPTION-04).
+- [ ] The endpoint still rescans per request, still returns 200 with a sorted list when the
+      root is absent, and still omits-and-logs a bad folder rather than failing; the client
+      fetch still soft-fails to an empty list in all five failure cases. Covered by the
+      catalog, endpoint, and service tests (CONSUMPTION-05…CONSUMPTION-08).
+- [ ] Descriptors carry the full field set, and `discovery`/`services` are still carried
+      without gating a load (CONSUMPTION-20).
+- [ ] Sidebar ordering and labelling and the generic `/ext/:id` host are preserved
+      (CONSUMPTION-09, CONSUMPTION-10).
+- [ ] Mount and teardown follow the import → verify tag → create → set attributes → listen →
+      insert / remove-listener → remove-element sequence, covered by the host-view tests
       (CONSUMPTION-11…CONSUMPTION-14).
 - [ ] Context attributes are set before insertion and updated in place, and the shell
       neither calls into the element nor reads state back off it
       (CONSUMPTION-17, CONSUMPTION-18).
 - [ ] The plain shell image still works with zero extensions, and extensions ship either
       as a layered image or as a mounted volume, never both at once (CONSUMPTION-15).
-- [ ] A mounted volume carries an assembled dist, is read-only, needs no shell
-      configuration, and degrades to zero extensions when absent or malformed
+- [ ] A mounted volume carries one folder per extension and no registry file, is read-only,
+      needs no shell configuration, and degrades per folder when partly malformed
       (CONSUMPTION-19).
 - [ ] Any contract widening has an accepted ADR (CONSUMPTION-16).
 
 ## 8. References
 
+- [ADR 0012 — Filesystem-scanned extension discovery with package.json manifests](../adr/0012-filesystem-scanned-extension-discovery.md)
 - [ADR 0006 — Web-component extension system with a static registry](../adr/0006-web-component-extension-system.md)
 - [ADR 0007 — Independent extension builds](../adr/0007-independent-extension-builds.md)
 - [ADR 0008 — Bidirectional shell/extension communication via context attributes](../adr/0008-bidirectional-shell-extension-communication.md)
@@ -217,6 +271,7 @@ A shell change touching the extension path conforms to this standard when:
 - [Architecture 002 — Extension System](../architecture/002-extension-system.md)
 - [Architecture 003 — Independent Extension Builds](../architecture/003-independent-extension-builds.md)
 - [Architecture 006 — Mounted Extension Delivery](../architecture/006-mounted-extension-delivery.md)
+- [Architecture 008 — Backend Extension Discovery](../architecture/008-backend-extension-discovery.md)
 - [STD 002 — Extension Authoring and Shell Communication](./002-extension-authoring-and-communication.md)
 - [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)
 
@@ -224,6 +279,7 @@ A shell change touching the extension path conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.0.0 | 2026-08-18 | **Breaking.** The registry is removed per ADR 0012: the extensions root's contents are the configuration, and discovery is `GET /api/extensions`, scanned per request. §4 drops **Registry**, renames **Manifest entry** to **Extension descriptor**, and adds **Extensions root**, **Extension catalog**, and **Extension manifest**. CONSUMPTION-01 now separates static asset delivery from endpoint-based discovery; -02 requires one shared root resolution; -03 extends `Extensions:RootPath` to the scan; §5.2 rewritten (-05 endpoint call, -06 per-request scan and per-folder degradation, -07 re-justified content-type check, -08 re-justified api.ts split); new -20 fixes the descriptor shape and makes `discovery`/`services` non-gating; -09 uses `displayName`; -12 adds the tag-registration failure; -15 and -19 drop the registry file and warn that stale folders are now served. |
 | 1.4.0 | 2026-08-17 | §6 implementation pointers updated per ADR 0010/0011: the hostPath example is removed (unreliable on kind and Docker Desktop Kubernetes, no filesystem access from the node) and replaced by an OCI image volume example (`Dockerfile.extensions-image`, `values-dev-imagevolume.yaml`). No normative change — CONSUMPTION-15 and CONSUMPTION-19 remain volume-type-agnostic. |
 | 1.3.0 | 2026-08-13 | Mounted extension volumes as a second delivery mode per ADR 0009: CONSUMPTION-02 now fixes the serving *path* while allowing either source; CONSUMPTION-15 rewritten to name two mutually exclusive modes; new CONSUMPTION-19 specifies the mounted volume's shape and failure behaviour. CONSUMPTION-03 unchanged — `Extensions:RootPath` stays Development-only. |
 | 1.2.0 | 2026-08-10 | Bidirectional communication per ADR 0008: context attributes added (new §5.5, CONSUMPTION-17, CONSUMPTION-18); CONSUMPTION-11 and CONSUMPTION-14 rewritten; Deployment renumbered to §5.6. Corrected CONSUMPTION-02's cross-reference from CONSUMPTION-13 to CONSUMPTION-15. |

@@ -2,24 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { createPinia, setActivePinia } from 'pinia'
 import { useExtensionsStore } from '../extensions'
-import { getExtensionRegistry, type ExtensionManifest } from '@/services/extensions'
+import { getExtensions, type ExtensionDescriptor } from '@/services/extensions'
 
 vi.mock('@/services/extensions')
 
-const manifests: ExtensionManifest[] = [
+const descriptors: ExtensionDescriptor[] = [
   {
     id: 'smiley-face',
-    name: 'Smiley Face',
+    name: 'ext-smiley-face',
+    displayName: 'Smiley Face',
+    version: '1.0.0',
+    type: 'WebComponent',
     tag: 'ext-smiley-face',
-    module: '/extensions/smiley-face/smiley-face.js',
+    module: '/extensions/smiley-face/extension.js',
     icon: '/extensions/smiley-face/icon.svg',
+    discovery: null,
+    services: null,
   },
 ]
 
 describe('extensions store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.mocked(getExtensionRegistry).mockResolvedValue(manifests)
+    vi.mocked(getExtensions).mockResolvedValue(descriptors)
   })
 
   it('starts empty and not loaded', () => {
@@ -31,14 +36,14 @@ describe('extensions store', () => {
   it('load() populates extensions and marks the store loaded', async () => {
     const store = useExtensionsStore()
     await store.load()
-    expect(store.extensions).toEqual(manifests)
+    expect(store.extensions).toEqual(descriptors)
     expect(store.loaded).toBe(true)
   })
 
-  it('byId finds a manifest and returns undefined for unknown ids', async () => {
+  it('byId finds a descriptor and returns undefined for unknown ids', async () => {
     const store = useExtensionsStore()
     await store.load()
-    expect(store.byId('smiley-face')).toEqual(manifests[0])
+    expect(store.byId('smiley-face')).toEqual(descriptors[0])
     expect(store.byId('nope')).toBeUndefined()
   })
 })

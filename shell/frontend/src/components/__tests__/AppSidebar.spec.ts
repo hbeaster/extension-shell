@@ -4,7 +4,21 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import AppSidebar from '../AppSidebar.vue'
 import { useExtensionsStore } from '@/stores/extensions'
+import { type ExtensionDescriptor } from '@/services/extensions'
 import { useShellContextStore } from '@/stores/shellContext'
+
+const descriptor = (id: string, displayName: string): ExtensionDescriptor => ({
+  id,
+  name: `ext-${id}`,
+  displayName,
+  version: '1.0.0',
+  type: 'WebComponent',
+  tag: `ext-${id}`,
+  module: `/extensions/${id}/extension.js`,
+  icon: `/extensions/${id}/icon.svg`,
+  discovery: null,
+  services: null,
+})
 
 describe('AppSidebar', () => {
   let pinia: ReturnType<typeof createPinia>
@@ -42,21 +56,11 @@ describe('AppSidebar', () => {
 
   it('renders a link with an icon for each installed extension', () => {
     const store = useExtensionsStore()
+    // name is the npm package name and displayName is the label — they differ
+    // here so the sidebar cannot pass by reading the wrong one.
     store.extensions = [
-      {
-        id: 'smiley-face',
-        name: 'Smiley Face',
-        tag: 'ext-smiley-face',
-        module: '/extensions/smiley-face/smiley-face.js',
-        icon: '/extensions/smiley-face/icon.svg',
-      },
-      {
-        id: 'buzzer',
-        name: 'Buzzer',
-        tag: 'ext-buzzer',
-        module: '/extensions/buzzer/buzzer.js',
-        icon: '/extensions/buzzer/icon.svg',
-      },
+      descriptor('smiley-face', 'Smiley Face'),
+      descriptor('buzzer', 'Buzzer'),
     ]
 
     const wrapper = mountSidebar()

@@ -4,6 +4,7 @@
 - Date: 2026-08-05
 - Amended by: [ADR 0007](./0007-independent-extension-builds.md) (workspace build replaced by independent per-extension builds)
 - Amended by: [ADR 0008](./0008-bidirectional-shell-extension-communication.md) (one-directional event channel replaced by a bidirectional, asymmetric one)
+- Amended by: [ADR 0012](./0012-filesystem-scanned-extension-discovery.md) (static registry replaced by a filesystem scan behind `/api/extensions`; the rejected "backend discovery endpoint" alternative is now the decision)
 
 ## Context
 

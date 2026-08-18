@@ -1,10 +1,37 @@
 {
   "name": "ext-buzzer",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build"
+  },
+  "bc-extension": {
+    "type": "WebComponent",
+    "displayName": "Buzzer",
+    "tag": "ext-buzzer",
+    "module": "extension.js",
+    "icon": "icon.svg",
+    "discovery": {
+      "implements": [
+        {
+          "name": "extensions-standard",
+          "versions": ["1.1.1"]
+        }
+      ],
+      "requires": [
+        {
+          "name": "DesignSystemStandard",
+          "versions": ["1.1.1", "2.0.0"]
+        }
+      ]
+    },
+    "services": {
+      "Standards-DocumentViewerService": {
+        "optional": false,
+        "versions": ["2.0.0", "3.0.0"]
+      }
+    }
   },
   "dependencies": {
     "vue": "^3.5.40"

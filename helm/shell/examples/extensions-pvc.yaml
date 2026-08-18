@@ -1,9 +1,11 @@
 # Example PVC for mounted extension delivery (ADR 0009, STD 001 CONSUMPTION-19).
 #
-# The claim holds an assembled extension dist — registry.json plus one folder
-# per extension — exactly what `node scripts/build-all.mjs` writes to
-# extensions/dist/. The chart mounts it read-only over /app/wwwroot/extensions,
-# where the shell's existing wwwroot static-file serving picks it up.
+# The claim holds an assembled extension dist — one folder per extension holding
+# package.json, extension.js and icon.svg — exactly what
+# `node scripts/build-all.mjs` writes to extensions/dist/. There is no index
+# file: the folders themselves are what the shell discovers (ADR 0012). The
+# chart mounts it read-only over /app/wwwroot/extensions, where the shell's
+# existing wwwroot static-file serving picks it up.
 #
 #   kubectl apply -f extensions-pvc.yaml
 #   helm install shell helm/shell \
@@ -59,9 +61,10 @@ spec:
 #       containers:
 #         - name: populate
 #           image: shell-ext:latest
-#           # Clear first so removed extensions actually disappear: the registry
-#           # is replaced wholesale, and a stale folder left behind is dead
-#           # weight the new registry.json no longer references.
+#           # Clearing first is REQUIRED, not hygiene. The folder contents are
+#           # the shell's configuration, so a stale folder left behind is still
+#           # discovered and still appears in the sidebar, at whatever version
+#           # was last copied.
 #           command:
 #             - sh
 #             - -c
@@ -74,6 +77,6 @@ spec:
 #           persistentVolumeClaim:
 #             claimName: shell-extensions
 #
-# After populating, restart the pods only if you want a clean cut — the shell
-# reads files per request, but the SPA fetches registry.json once at startup,
-# so already-open browser sessions keep the old list until reloaded.
+# After populating, no restart is needed — /api/extensions rescans the directory
+# on every call. But the SPA fetches that list once at startup, so already-open
+# browser sessions keep the old one until reloaded.

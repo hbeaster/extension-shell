@@ -1,33 +1,59 @@
-// Extension registry access. This is deliberately separate from api.ts:
-// the registry is a static asset (not an /api/* endpoint) and absence of
-// extensions is a normal state, so failures resolve to an empty list
-// instead of throwing.
+// Extension discovery. This is deliberately separate from api.ts even though
+// it now calls an /api/* endpoint: api.ts throws on error, and this is called
+// from App.vue's onMounted with nothing to catch a rejection. Running with zero
+// extensions is a normal state, so every failure resolves to an empty list.
+// See ADR 0012.
 
-export interface ExtensionManifest {
+export interface ExtensionCapabilityRef {
+  name: string
+  versions: string[]
+}
+
+export interface ExtensionDiscovery {
+  implements: ExtensionCapabilityRef[]
+  requires: ExtensionCapabilityRef[]
+}
+
+export interface ExtensionServiceRequirement {
+  optional: boolean
+  versions: string[]
+}
+
+export interface ExtensionDescriptor {
   id: string
   name: string
+  displayName: string
+  version: string
+  type: 'WebComponent'
   tag: string
   module: string
   icon: string
+  // Declared standards and data services, carried for inspection only: the
+  // shell mounts an extension whether or not they can be satisfied.
+  discovery: ExtensionDiscovery | null
+  services: Record<string, ExtensionServiceRequirement> | null
 }
 
-export async function getExtensionRegistry(): Promise<ExtensionManifest[]> {
+export async function getExtensions(): Promise<ExtensionDescriptor[]> {
   let response: Response
   try {
-    response = await fetch('/extensions/registry.json', {
+    response = await fetch('/api/extensions', {
       headers: { Accept: 'application/json' },
     })
   } catch {
     return []
   }
-  // When no extensions are installed the SPA fallback answers this URL with
-  // index.html and HTTP 200, so the status alone is not a reliable signal.
+
+  // A shell whose SPA bundle is newer than its backend has no /api/extensions
+  // route, so the request falls through to index.html with HTTP 200 — the
+  // status alone is not a reliable signal.
   const contentType = response.headers.get('content-type') ?? ''
   if (!response.ok || !contentType.includes('application/json')) {
     return []
   }
+
   try {
-    const body = (await response.json()) as { extensions?: ExtensionManifest[] }
+    const body = (await response.json()) as { extensions?: ExtensionDescriptor[] }
     return Array.isArray(body?.extensions) ? body.extensions : []
   } catch {
     return []

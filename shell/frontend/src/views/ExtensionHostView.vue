@@ -36,7 +36,7 @@ function teardown() {
 async function mountExtension() {
   teardown()
   error.value = null
-  // Wait until both the registry and the host element are available; the
+  // Wait until both the extension list and the host element are available; the
   // watcher fires again when either arrives (e.g. hard refresh on /ext/:id).
   if (!store.loaded || !host.value) {
     return
@@ -50,7 +50,14 @@ async function mountExtension() {
   try {
     await loadExtensionModule(ext.module)
   } catch {
-    error.value = `Failed to load "${ext.name}".`
+    error.value = `Failed to load "${ext.displayName}".`
+    return
+  }
+  // The bundle registers its own tag, and nothing at packaging time can check
+  // that the literal it uses matches the manifest — the bundle is opaque. Catch
+  // the mismatch here, or createElement silently yields an inert element.
+  if (!customElements.get(ext.tag)) {
+    error.value = `"${ext.displayName}" did not register <${ext.tag}>.`
     return
   }
   element = document.createElement(ext.tag)
@@ -59,7 +66,7 @@ async function mountExtension() {
   // miss anything dispatched while the element connects.
   applyContext(element)
   notifyHandler = () => {
-    modalMessage.value = `Hi from ${ext.name}`
+    modalMessage.value = `Hi from ${ext.displayName}`
   }
   element.addEventListener('shell:notify', notifyHandler)
   host.value.appendChild(element)

@@ -29,12 +29,17 @@ ingress:
 
 # Optional: mount prebuilt extension assets instead of baking them into the
 # image with Dockerfile.extensions. The volume MUST contain an assembled
-# extensions dist — registry.json plus one folder per extension — exactly what
-# `node scripts/build-all.mjs` writes to extensions/dist/.
+# extensions dist — one folder per extension holding package.json, extension.js
+# and icon.svg — exactly what `node scripts/build-all.mjs` writes to
+# extensions/dist/. There is no index or registry file; the folders themselves
+# are what the shell discovers.
 #
 # Mounted over /app/wwwroot/extensions, so the shell serves it with no extra
 # configuration. Use the plain shell image in this mode: mounting shadows any
 # extensions baked into a layered (shell-ext) image.
+#
+# Whatever populates the volume must clear it first — a folder left behind by a
+# removed extension is still discovered and still shows up in the sidebar.
 extensions:
   enabled: false
   # Raw volume spec, passed through verbatim. Any volume type works.

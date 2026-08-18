@@ -1,17 +1,17 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getExtensionRegistry, type ExtensionManifest } from '@/services/extensions'
+import { getExtensions, type ExtensionDescriptor } from '@/services/extensions'
 
 export const useExtensionsStore = defineStore('extensions', () => {
-  const extensions = ref<ExtensionManifest[]>([])
+  const extensions = ref<ExtensionDescriptor[]>([])
   const loaded = ref(false)
 
   async function load() {
-    extensions.value = await getExtensionRegistry()
+    extensions.value = await getExtensions()
     loaded.value = true
   }
 
-  function byId(id: string): ExtensionManifest | undefined {
+  function byId(id: string): ExtensionDescriptor | undefined {
     return extensions.value.find((ext) => ext.id === id)
   }
 

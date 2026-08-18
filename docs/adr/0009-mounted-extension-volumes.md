@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-13
 - Amends: [ADR 0006](./0006-web-component-extension-system.md), [ADR 0007](./0007-independent-extension-builds.md)
+- Amended by: [ADR 0012](./0012-filesystem-scanned-extension-discovery.md) (an "assembled dist" no longer contains a registry file — the mounted folders are themselves the configuration)
 
 ## Context
 

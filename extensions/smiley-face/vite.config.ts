@@ -12,7 +12,7 @@ export default defineConfig({
     lib: {
       entry: fileURLToPath(new URL('./src/main.ts', import.meta.url)),
       formats: ['es'],
-      fileName: () => 'smiley-face.js',
+      fileName: () => 'extension.js',
     },
   },
 })

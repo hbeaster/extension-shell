@@ -1,80 +1,92 @@
-// Assembles built extensions into extensions/dist/:
-//   dist/registry.json            merged manifest list consumed by the shell
-//   dist/<id>/<id>.js             web-component bundle
-//   dist/<id>/icon.svg            sidebar icon
+// Assembles built extensions into extensions/dist/, one folder per extension:
+//   dist/<id>/package.json        name, version, and the bc-extension section
+//   dist/<id>/extension.js        web-component bundle (bc-extension.module)
+//   dist/<id>/icon.svg            sidebar icon (bc-extension.icon)
+// There is no registry: the folder contents are the configuration, and the
+// shell discovers extensions by scanning this tree (ADR 0012).
+//
 // Shell-owned packaging step: run after each extension has been built
 // independently (`npm ci && npm run build` in its own folder), or use
 // `scripts/build-all.mjs` to do both.
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { exists, findExtensions } from './discover.mjs'
 
 const root = path.dirname(fileURLToPath(new URL('.', import.meta.url)))
 const distRoot = path.join(root, 'dist')
 
-async function exists(p) {
-  try {
-    await stat(p)
-    return true
-  } catch {
-    return false
+// The shell hosts custom elements and nothing else yet; other types (iFrame is
+// the expected next one) would be omitted at runtime, so reject them here where
+// the author can still see the error.
+const SUPPORTED_TYPE = 'WebComponent'
+
+// module and icon name a file inside the extension's own folder. A path
+// separator or a .. segment would let a manifest aim the shell's dynamic
+// import at some other URL entirely.
+function assertPlainFileName(id, field, value) {
+  if (path.basename(value) !== value || value === '.' || value === '..' || /[\\/:]/.test(value)) {
+    throw new Error(`${id}: bc-extension.${field} "${value}" must be a plain file name inside the extension folder`)
   }
 }
 
 const entries = []
-for (const dirent of await readdir(root, { withFileTypes: true })) {
-  if (!dirent.isDirectory()) continue
-  const manifestPath = path.join(root, dirent.name, 'extension.json')
-  if (!(await exists(manifestPath))) continue
+for (const { id, pkg, dir } of await findExtensions(root)) {
+  const manifest = pkg['bc-extension']
+  const where = `extensions/${id}/package.json`
 
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  const { id, name, tag } = manifest
-  if (!id || !name || !tag) {
-    throw new Error(`${manifestPath}: manifest must define id, name, and tag`)
+  if (!pkg.name || !pkg.version) {
+    throw new Error(`${where}: must define a top-level name and version — the shell surfaces both`)
   }
-  if (id !== dirent.name) {
-    throw new Error(`${manifestPath}: id "${id}" must match folder name "${dirent.name}"`)
+  if (manifest.type !== SUPPORTED_TYPE) {
+    throw new Error(`${where}: bc-extension.type must be "${SUPPORTED_TYPE}" (got ${JSON.stringify(manifest.type)})`)
   }
-  if (!tag.startsWith('ext-')) {
-    throw new Error(`${manifestPath}: tag "${tag}" must start with "ext-" to avoid collisions`)
+  if (typeof manifest.tag !== 'string' || !manifest.tag.startsWith('ext-')) {
+    throw new Error(`${where}: bc-extension.tag must start with "ext-" to avoid collisions`)
   }
-  entries.push({ id, name, tag, dir: path.join(root, dirent.name) })
+
+  const module = manifest.module ?? 'extension.js'
+  const icon = manifest.icon ?? 'icon.svg'
+  assertPlainFileName(where, 'module', module)
+  assertPlainFileName(where, 'icon', icon)
+
+  entries.push({ id, pkg, dir, tag: manifest.tag, manifest, module, icon })
 }
 
-for (const key of ['id', 'tag']) {
-  const seen = new Set()
-  for (const entry of entries) {
-    if (seen.has(entry[key])) {
-      throw new Error(`Packaging conflict: two installed extensions share ${key} "${entry[key]}" — the deployer must resolve which one ships`)
-    }
-    seen.add(entry[key])
+// Folder names — and therefore ids — are unique by construction. Tags are not:
+// two independently authored extensions can pick the same custom-element name,
+// and only the deployer assembling them can see the conflict.
+const seenTags = new Set()
+for (const entry of entries) {
+  if (seenTags.has(entry.tag)) {
+    throw new Error(`Packaging conflict: two installed extensions share tag "${entry.tag}" — the deployer must resolve which one ships`)
   }
+  seenTags.add(entry.tag)
 }
 
 await rm(distRoot, { recursive: true, force: true })
 await mkdir(distRoot, { recursive: true })
 
-const registry = []
-for (const entry of entries.sort((a, b) => a.id.localeCompare(b.id))) {
-  const bundle = path.join(entry.dir, 'dist', `${entry.id}.js`)
-  const icon = path.join(entry.dir, 'icon.svg')
+for (const entry of entries) {
+  const bundle = path.join(entry.dir, 'dist', entry.module)
+  const icon = path.join(entry.dir, entry.icon)
   for (const required of [bundle, icon]) {
     if (!(await exists(required))) {
       throw new Error(`${entry.id}: missing ${required} — build the extension in its own folder (npm ci && npm run build) before assembling`)
     }
   }
+
   const outDir = path.join(distRoot, entry.id)
   await mkdir(outDir, { recursive: true })
-  await cp(bundle, path.join(outDir, `${entry.id}.js`))
-  await cp(icon, path.join(outDir, 'icon.svg'))
-  registry.push({
-    id: entry.id,
-    name: entry.name,
-    tag: entry.tag,
-    module: `/extensions/${entry.id}/${entry.id}.js`,
-    icon: `/extensions/${entry.id}/icon.svg`,
-  })
+  await cp(bundle, path.join(outDir, entry.module))
+  await cp(icon, path.join(outDir, entry.icon))
+
+  // The shipped package.json is trimmed, not copied: it becomes publicly
+  // fetchable at /extensions/<id>/package.json, and devDependencies, scripts
+  // and repo internals have no business being served. bc-extension goes across
+  // verbatim — the shell applies the defaults, so nothing is baked in here.
+  const shipped = { name: entry.pkg.name, version: entry.pkg.version, 'bc-extension': entry.manifest }
+  await writeFile(path.join(outDir, 'package.json'), JSON.stringify(shipped, null, 2) + '\n')
 }
 
-await writeFile(path.join(distRoot, 'registry.json'), JSON.stringify({ extensions: registry }, null, 2) + '\n')
-console.log(`Assembled ${registry.length} extension(s) into ${distRoot}`)
+console.log(`Assembled ${entries.length} extension(s) into ${distRoot}`)

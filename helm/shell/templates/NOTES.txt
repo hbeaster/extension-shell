@@ -16,19 +16,26 @@ Health probes read {{ .Values.probes.liveness.path }}.
 
 Extensions are being MOUNTED from a volume, not baked into the image. The volume
 is mounted read-only over /app/wwwroot/extensions and must already contain an
-assembled dist — registry.json plus one folder per extension, exactly what
-`node scripts/build-all.mjs` writes to extensions/dist/.
+assembled dist — one folder per extension holding package.json, extension.js and
+icon.svg, exactly what `node scripts/build-all.mjs` writes to extensions/dist/.
 
   Use the plain shell image in this mode. Mounting over /app/wwwroot/extensions
   shadows any extensions baked into a layered (shell-ext) image: the volume is
   served and the baked assets become unreachable, with nothing logged about it.
 
+  Clear the volume before repopulating it. The folder contents are the shell's
+  configuration, so a folder left behind by a removed extension is discovered
+  and listed at whatever version was last written.
+
 Check what the pod is actually serving:
 
   kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "shell.fullname" . }} -- ls /app/wwwroot/extensions
+  kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "shell.fullname" . }} -- wget -qO- localhost:8080/api/extensions
 
-An empty or absent volume is not an error. The registry fetch soft-fails and the
-sidebar shows only built-in tools, so verify the mount if extensions go missing.
+An empty or absent volume is not an error. The discovery endpoint returns an
+empty list and the sidebar shows only built-in tools, so verify the mount if
+extensions go missing. Replacing the volume needs no restart — the endpoint
+rescans the directory on every call.
 {{- else }}
 
 Extensions, if any, come from the image itself (see Dockerfile.extensions). To
