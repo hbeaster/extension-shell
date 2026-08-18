@@ -17,15 +17,19 @@
 #
 #   Plain Linux / k3s, where the node IS your machine     works as-is
 #   Docker Desktop, older VM-based Kubernetes             use /run/desktop/mnt/host/c/projects/...
-#   kind (incl. current Docker Desktop Kubernetes)        needs extraMounts — see below
-#   minikube                                              needs `minikube mount` — see below
+#   kind, self-managed (you ran `kind create cluster`)    needs extraMounts — Fix A below
+#   kind, current Docker Desktop Kubernetes               no extraMounts option — Fix B below, not A
+#   minikube                                              needs `minikube mount` — Fix C below
 #
 # Check which you have with `kubectl get nodes`. A node named *-control-plane
 # means the cluster is kind-based, and the node is a container with no mapping
-# to your drive. Verified on this repo's dev machine: every host-path
-# convention fails there — C:/projects/..., /run/desktop/mnt/host/c/...,
-# /host_mnt/c/..., /c/..., and /mnt/c/... all give
+# to your drive. A node literally named "desktop-control-plane" is Docker
+# Desktop's managed kind cluster specifically — go straight to Fix B, Fix A
+# does not apply to it (see below). Verified on this repo's dev machine: every
+# host-path convention fails there — C:/projects/...,
+# /run/desktop/mnt/host/c/..., /host_mnt/c/..., /c/..., and /mnt/c/... all give
 #   MountVolume.SetUp failed ... hostPath type check failed: <path> is not a directory
+# Fix B (docker cp into the node) is what resolved it there.
 #
 # --- Fix A: kind with extraMounts (keeps the live repo loop) ---------------
 # Only possible for a kind cluster you create yourself; Docker Desktop's
@@ -79,9 +83,12 @@ extensions:
   enabled: true
   volume:
     hostPath:
-      # This repo's assembled dist. See the notes above if your cluster's node
-      # cannot reach this path — that is the common case on kind.
-      path: C:/projects/extension-shell/extensions/dist
+      # Docker Desktop Kubernetes (node "desktop-control-plane") can't see the
+      # Windows drive and has no extraMounts option, so this repo's dist was
+      # copied into the node container instead (Fix B in the notes above):
+      #   docker cp extensions/dist desktop-control-plane:/var/local/shell-extensions
+      # Re-run that copy after every `node scripts/build-all.mjs` to pick up changes.
+      path: /c/projects/extension-shell/extensions/dist
       # Directory, not DirectoryOrCreate: a path the node cannot see should
       # fail the pod loudly rather than create an empty directory and leave the
       # shell quietly serving zero extensions, which looks identical to a

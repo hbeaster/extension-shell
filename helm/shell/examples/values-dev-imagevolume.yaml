@@ -1,0 +1,57 @@
+# Local development: serve extensions from a standalone OCI image mounted via
+# Kubernetes' `image` volume type (GA in 1.36; beta-and-on-by-default from
+# 1.35 — check `kubectl version` if unmounts fail with a validation error).
+# See ADR 0010 and Dockerfile.extensions-image.
+#
+#   docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+#   helm install shell helm/shell -f helm/shell/examples/values-dev-imagevolume.yaml
+#
+# Unlike hostPath (values-dev-hostpath.yaml), this never touches the node's
+# filesystem, so it sidesteps the "node can't see the Windows drive" failure
+# that hits hostPath on Docker Desktop / kind. It reuses the same image-load
+# mechanism this chart already needs for the `shell` image itself.
+#
+# No live-edit loop: after `node scripts/build-all.mjs`, rebuild AND reload
+# the image (see below) — the volume is a snapshot of whatever was loaded,
+# not a filesystem watch.
+#
+# ===========================================================================
+# LOADING THE IMAGE ONTO THE NODE (local clusters only)
+#
+# The image is never pulled from a registry in local dev — same as the shell
+# image itself, it must be loaded into the node directly, or the pod sits in
+# ImagePullBackOff.
+#
+#   kind / kind-based Docker Desktop Kubernetes:
+#     docker save shell-extensions:latest \
+#       | docker exec -i <node-name> ctr -n k8s.io images import -
+#     # <node-name>: `kubectl get nodes` — e.g. "desktop-control-plane" on
+#     # current Docker Desktop Kubernetes.
+#
+#   minikube:
+#     minikube image load shell-extensions:latest
+#
+# Re-run the build + load after every extension change.
+#
+# In a real cluster: push shell-extensions to a registry the cluster can
+# reach and set `extensions.volume.image.reference` below to that tag, with
+# `pullPolicy: IfNotPresent` (or `Always`) instead of `Never`.
+# ===========================================================================
+
+replicaCount: 1
+
+image:
+  repository: shell
+  tag: latest
+  pullPolicy: Never
+
+extensions:
+  enabled: true
+  volume:
+    image:
+      # Must already be loaded into the node's containerd image store (see
+      # notes above) — pullPolicy: Never means kubelet will not attempt a
+      # registry pull, and the pod fails fast if the image is missing rather
+      # than hanging on a pull that cannot succeed for a locally built image.
+      reference: shell-extensions:latest
+      pullPolicy: Never

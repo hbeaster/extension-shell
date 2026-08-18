@@ -16,33 +16,5 @@
   },
   "engines": {
     "node": "^22.18.0 || >=24.12.0"
-  },
-  "bc-extension": {
-    "type": "WebComponent", // Determines what type of extension this is. May support iFrame in the future.
-    "name": "Buzzer", // Name of the extension that Shell will display. // --Remove-- this because it is here in package
-    "displayName"?: "Buzzerrrr", // Name of the extension that Shell will display.
-    "version": "1.0.0", // semantic version of the extension // --Remove-- this because it is here in package
-    "module": "buzzer.js", // path to the module that shell will load.
-    "icon": "icon.svg", // SVG icon that the shell will display // DEFAULT to that
-    "discovery": {
-      "implements" : [ // These are all the standards and versions that I implement
-        {
-          "name": "beast-code-extensions-standard",
-          "versions": [ "1.1.1"]
-        }
-      ],
-      "requires": [ // These are all the standards and versions that I require from shell
-        {
-          "name": "DesignSystemStandard",
-          "versions": [ "1.1.1", "2.0.0" ]
-        }
-      ]
-    },
-    "services": { // These are all the service standards that I require
-      "BeastCode-Standards-DocumentViewerService": {
-        "optional": false,
-        "versions": [ "2.0.0", "3.0.0" ]
-      }
-    }
   }
 }

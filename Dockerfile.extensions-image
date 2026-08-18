@@ -1,0 +1,17 @@
+# Packages the assembled extension dist as a standalone OCI image, for use
+# with Kubernetes' `image` volume type (GA in 1.36) — see
+# helm/shell/examples/values-dev-imagevolume.yaml and ADR 0010.
+#
+# Unlike Dockerfile.extensions, this image is never run as a container: the
+# kubelet only ever unpacks its filesystem into a read-only volume mount, so
+# there is no base runtime and no ENTRYPOINT.
+#
+#   docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+
+FROM node:24-alpine AS extensions-build
+WORKDIR /src
+COPY extensions/ ./
+RUN node scripts/build-all.mjs
+
+FROM scratch AS final
+COPY --from=extensions-build /src/dist /
