@@ -11,11 +11,11 @@ The shell is maintained by a core team, but other teams need to ship additional 
 
 ## Decision
 
-Extensions are **custom elements (web components)** authored with Vue's `defineCustomElement`, each built by its own Vite lib-mode build into a self-contained ES module (Vue runtime bundled per extension, ~29 KB gzip). They live in an `extensions/` npm workspace at the repository root, sibling to the `shell/` application rather than inside it.
+Extensions are **custom elements (web components)** authored with Vue's `defineCustomElement`, each built by its own Vite lib-mode build into a self-contained ES module (Vue runtime bundled per extension, ~29 KB gzip).
 
-Discovery is a **static `registry.json`** at `/extensions/registry.json`, assembled at build time by `extensions/scripts/assemble.mjs` from per-extension `extension.json` manifests (`{ id, name, tag }`; `id` matches the folder, `tag` is `ext-` prefixed and unique — the script fails the build otherwise). Each entry resolves to `module` and `icon` URLs under `/extensions/<id>/`.
+Discovery is a **static `registry.json`** that registers each extension with the following fields `{ id, name, tag, module, icon }` for each entry.
 
-Delivery is a **layered Docker image**: `Dockerfile.extensions` builds the workspace and copies `extensions/dist/` into the shell image's `wwwroot/extensions/`, so extensions are served by the existing static-file middleware with no backend code involved. In development the backend maps `/extensions` to `extensions/dist` via the `Extensions:RootPath` config key (Development settings only), and Vite proxies `/extensions` to the backend.
+Delivery is a **layered Docker image**: `Dockerfile.extensions` builds the workspace and copies each extension's `dist/` into the shell image's `wwwroot/extensions/`, so extensions are served by the existing static-file middleware with no backend code involved.
 
 The shell fetches the registry at startup into a Pinia store, appends sidebar entries after the built-in tools, and hosts extensions at `/ext/:id`, where it dynamically imports the module and creates the custom element. Extensions talk to the shell only via DOM `CustomEvent`s dispatched on their host element (currently `shell:notify`, which opens a shell modal).
 
