@@ -64,12 +64,12 @@ See `helm/shell/values.yaml` for replicas, resources, ingress, and probe setting
 
 ### Extension delivery
 
-Two supported modes (ADR 0009). **Layered image** is the default — build `shell-ext` with
-`Dockerfile.extensions` and point `image.repository`/`image.tag` at it.
+Three supported modes (ADR 0009, ADR 0010). **Layered image** is the default — build
+`shell-ext` with `Dockerfile.extensions` and point `image.repository`/`image.tag` at it.
 
-**Mounted volume** ships extensions independently of the shell image. Publish the assembled
-dist — `registry.json` plus one folder per extension, exactly what `node scripts/build-all.mjs`
-writes to `extensions/dist/` — to a volume, then:
+**Mounted volume (PVC)** ships extensions independently of the shell image. Publish the
+assembled dist — `registry.json` plus one folder per extension, exactly what
+`node scripts/build-all.mjs` writes to `extensions/dist/` — to a volume, then:
 
 ```bash
 kubectl apply -f helm/shell/examples/extensions-pvc.yaml
@@ -82,31 +82,24 @@ helm install shell helm/shell \
 recipe. It uses `ReadWriteMany` deliberately: the chart runs 2 replicas by default, so
 `ReadWriteOnce` would leave pods on other nodes stuck in `ContainerCreating`.
 
-#### Local development (hostPath)
-
-For a local single-node cluster, `helm/shell/examples/values-dev-hostpath.yaml` mounts
-extensions from the node instead, so rebuilding is the whole loop — files are read per
-request, with no pod restart:
+**Mounted volume (image)** packages the assembled dist as a standalone OCI image and mounts
+it with Kubernetes' `image` volume type (GA in 1.36) — no external storage to provision:
 
 ```bash
-docker build -f shell/Dockerfile -t shell .        # once
-helm install shell helm/shell -f helm/shell/examples/values-dev-hostpath.yaml
+docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+helm install shell helm/shell -f helm/shell/examples/values-dev-imagevolume.yaml
 ```
 
-The default path is this repo's own `extensions/dist`. hostPath reads the *node's*
-filesystem, not your workstation's, so that value mounts as-is only where the node can see
-it — plain Linux/k3s, or a kind cluster created with `extraMounts`. Check `kubectl get
-nodes`: a node named `*-control-plane` means kind (including current Docker Desktop
-Kubernetes), whose node is a container with no view of your drive; there you either create
-your own kind cluster with `extraMounts` to keep the live loop, or copy the dist in with
-`docker cp extensions/dist <node>:/var/local/shell-extensions` and re-copy after each
-rebuild. The example file spells out all of these, plus minikube.
+For local single-node clusters (kind, Docker Desktop Kubernetes, minikube), the image must
+be loaded into the node directly rather than pulled — `values-dev-imagevolume.yaml` spells
+out the load command for each. In a shared cluster, push the image to a registry and point
+`extensions.volume.image.reference` at that tag instead. This mode replaced an earlier
+hostPath-based example (removed): hostPath required the node to see the host filesystem,
+which fails outright on kind and Docker Desktop Kubernetes with no reliable per-platform fix
+— the image volume sidesteps that by never touching the node's filesystem.
 
-> hostPath is for local clusters only — it ties a pod to its node and is commonly blocked by
-> admission policy. Use a PVC anywhere shared.
-
-`extensions.volume` takes a raw volume spec, so any volume type works (PVC, NFS, CSI). It is
-mounted read-only over `/app/wwwroot/extensions` and needs no shell configuration.
+`extensions.volume` takes a raw volume spec, so any volume type works (PVC, NFS, CSI, image).
+It is mounted read-only over `/app/wwwroot/extensions` and needs no shell configuration.
 
 > Use the plain `shell` image in this mode: the mount shadows extensions baked into a layered
 > image. A missing or empty volume is not an error — the sidebar simply shows only built-in

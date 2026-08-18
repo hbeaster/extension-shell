@@ -1,9 +1,9 @@
 # STD 001 — Extension Consumption by the Shell
 
 Status: Active
-Version: 1.3.0
-Date: 2026-08-13
-Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md)
+Version: 1.4.0
+Date: 2026-08-17
+Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md), [0010](../adr/0010-image-volume-extension-delivery.md), [0011](../adr/0011-remove-hostpath-extension-delivery.md)
 
 ## 1. Purpose and scope
 
@@ -177,9 +177,10 @@ The requirements above are implemented and tested here:
   `/app/wwwroot/extensions`, verbatim `volumes` passthrough, and the fail-fast guard for
   `enabled` without a volume), `helm/shell/templates/NOTES.txt` (the shadowing warning),
   `helm/shell/examples/extensions-pvc.yaml` (example claim and populate recipe),
-  `helm/shell/examples/values-dev-hostpath.yaml` (hostPath mount for a local cluster —
-  a development convenience distinct from CONSUMPTION-03, which governs running the
-  backend directly rather than in a pod).
+  `Dockerfile.extensions-image` and `helm/shell/examples/values-dev-imagevolume.yaml`
+  (OCI image volume mount — a development convenience, and a shared-cluster option via
+  a registry, distinct from CONSUMPTION-03, which governs running the backend directly
+  rather than in a pod).
 - Deployment: `Dockerfile.extensions`; runtime flow diagrams in
   [architecture snapshot 002](../architecture/002-extension-system.md); build and
   packaging flow in
@@ -223,6 +224,7 @@ A shell change touching the extension path conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.4.0 | 2026-08-17 | §6 implementation pointers updated per ADR 0010/0011: the hostPath example is removed (unreliable on kind and Docker Desktop Kubernetes, no filesystem access from the node) and replaced by an OCI image volume example (`Dockerfile.extensions-image`, `values-dev-imagevolume.yaml`). No normative change — CONSUMPTION-15 and CONSUMPTION-19 remain volume-type-agnostic. |
 | 1.3.0 | 2026-08-13 | Mounted extension volumes as a second delivery mode per ADR 0009: CONSUMPTION-02 now fixes the serving *path* while allowing either source; CONSUMPTION-15 rewritten to name two mutually exclusive modes; new CONSUMPTION-19 specifies the mounted volume's shape and failure behaviour. CONSUMPTION-03 unchanged — `Extensions:RootPath` stays Development-only. |
 | 1.2.0 | 2026-08-10 | Bidirectional communication per ADR 0008: context attributes added (new §5.5, CONSUMPTION-17, CONSUMPTION-18); CONSUMPTION-11 and CONSUMPTION-14 rewritten; Deployment renumbered to §5.6. Corrected CONSUMPTION-02's cross-reference from CONSUMPTION-13 to CONSUMPTION-15. |
 | 1.1.0 | 2026-08-06 | CONSUMPTION-15 wording updated for independent per-extension builds (ADR 0007); references to ADR 0007 and architecture 003. |
