@@ -1,4 +1,7 @@
 # Patterns to ignore when building packages.
+# examples/ holds operator-supplied manifests (an extensions PVC); they are not
+# part of the release, so keep them out of the packaged chart.
+examples/
 .DS_Store
 .git/
 .gitignore

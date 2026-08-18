@@ -1,0 +1,79 @@
+# Example PVC for mounted extension delivery (ADR 0009, STD 001 CONSUMPTION-19).
+#
+# The claim holds an assembled extension dist — registry.json plus one folder
+# per extension — exactly what `node scripts/build-all.mjs` writes to
+# extensions/dist/. The chart mounts it read-only over /app/wwwroot/extensions,
+# where the shell's existing wwwroot static-file serving picks it up.
+#
+#   kubectl apply -f extensions-pvc.yaml
+#   helm install shell helm/shell \
+#     --set extensions.enabled=true \
+#     --set extensions.volume.persistentVolumeClaim.claimName=shell-extensions
+#
+# Use the plain `shell` image in this mode. Mounting over that path shadows any
+# extensions baked into a layered `shell-ext` image.
+#
+# ACCESS MODE: the chart defaults to replicaCount 2, so several pods read this
+# claim at once and may land on different nodes. That needs ReadWriteMany (or
+# ReadOnlyMany once populated) backed by a storage class that supports it —
+# NFS, CephFS, Azure Files, EFS. ReadWriteOnce silently works with one replica
+# on one node and then blocks pods scheduled elsewhere, which surfaces as pods
+# stuck in ContainerCreating rather than as an extensions problem.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shell-extensions
+  labels:
+    app.kubernetes.io/name: shell
+    app.kubernetes.io/component: extensions
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      # Extension bundles are small — the two sample extensions total ~185 KB.
+      # This is sized for headroom, not need.
+      storage: 128Mi
+  # Must support ReadWriteMany. Omit to use the cluster default only if that
+  # default is RWX-capable; most dynamic block-storage defaults are not.
+  # storageClassName: nfs-client
+
+# ---------------------------------------------------------------------------
+# Populating the claim. Extensions are static files, so anything that puts them
+# on the volume works — this Job is one option, `kubectl cp` into a temporary
+# pod is another, and a CI step writing to the backing share is a third.
+#
+# Uncomment and adapt, or apply separately. It expects an image containing the
+# assembled dist at /dist; the layered `shell-ext` image carries it at
+# /app/wwwroot/extensions and works too, with the source path changed.
+#
+# apiVersion: batch/v1
+# kind: Job
+# metadata:
+#   name: shell-extensions-populate
+# spec:
+#   ttlSecondsAfterFinished: 300
+#   template:
+#     spec:
+#       restartPolicy: OnFailure
+#       containers:
+#         - name: populate
+#           image: shell-ext:latest
+#           # Clear first so removed extensions actually disappear: the registry
+#           # is replaced wholesale, and a stale folder left behind is dead
+#           # weight the new registry.json no longer references.
+#           command:
+#             - sh
+#             - -c
+#             - rm -rf /target/* && cp -r /app/wwwroot/extensions/. /target/
+#           volumeMounts:
+#             - name: extensions
+#               mountPath: /target
+#       volumes:
+#         - name: extensions
+#           persistentVolumeClaim:
+#             claimName: shell-extensions
+#
+# After populating, restart the pods only if you want a clean cut — the shell
+# reads files per request, but the SPA fetches registry.json once at startup,
+# so already-open browser sessions keep the old list until reloaded.

@@ -45,12 +45,14 @@ Full stack:
 - `docker build -f shell/Dockerfile -t shell .` (repo root) then `docker run -p 8080:8080 shell`
 - `docker build -f Dockerfile.extensions -t shell-ext .` (after building `shell`) — shell + extensions image
 - `helm lint helm/shell` / `helm template helm/shell`
+- `helm template helm/shell --set extensions.enabled=true --set extensions.volume.persistentVolumeClaim.claimName=x` — render the mounted-extension mode
 
 ## Conventions
 
 - API endpoints: attribute-routed controllers under `/api/*`, one controller per resource, in `shell/backend/src/Shell.Api/Controllers/`.
 - Frontend API calls go through `shell/frontend/src/services/api.ts` — add typed functions there, never `fetch` directly in components. (The extension registry fetch lives in `services/extensions.ts` — static asset, soft-fail semantics; see ADR 0006.)
 - Extensions are web components: one folder per extension in `extensions/` with an `extension.json` manifest (`{ id, name, tag }`; `id` = folder name, `tag` starts with `ext-`). Each is a standalone npm package (own committed `package-lock.json`) that must build in isolation and must not know about, or communicate with, any other extension — only the shell knows the installed set. They talk to the shell only via DOM `CustomEvent`s on their host element (`shell:notify` opens the shell modal). Widening this contract needs a new ADR.
+- Extension delivery has two modes (ADR 0009, STD 001 §5.6): the layered `shell-ext` image (default), or a volume holding an assembled dist mounted read-only over `/app/wwwroot/extensions` via the chart's opt-in `extensions` block. Mount mode needs no shell configuration and no backend code — `wwwroot` static-file serving already covers it. The modes are mutually exclusive: a mount shadows baked extensions silently, so mount mode uses the plain `shell` image.
 - Health endpoint is `/healthz` (used by k8s probes) — don't rename without updating the Helm values.
 - Significant technical decisions get a new ADR in `docs/adr/` (next number, MADR format: Context / Decision / Consequences).
 - Architecture changes get a new numbered file in `docs/architecture/` with updated mermaid diagrams; never edit old snapshots.

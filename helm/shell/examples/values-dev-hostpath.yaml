@@ -1,0 +1,89 @@
+# Local development: serve extensions straight from your working copy via a
+# hostPath mount, so `node scripts/build-all.mjs` is the whole loop — files are
+# read per request, so no image rebuild and no pod restart.
+#
+#   helm install shell helm/shell -f helm/shell/examples/values-dev-hostpath.yaml
+#
+# LOCAL SINGLE-NODE CLUSTERS ONLY. hostPath ties a pod to whatever happens to
+# sit on its node, bypasses storage isolation, and is commonly blocked outright
+# by admission policy. Use a PVC in any shared cluster — see extensions-pvc.yaml.
+#
+# ===========================================================================
+# READ THIS IF THE POD STICKS IN ContainerCreating
+#
+# hostPath reads the *node's* filesystem, not your workstation's. The default
+# below is this repo's own extensions/dist, which only mounts on a cluster
+# whose node can actually see that path:
+#
+#   Plain Linux / k3s, where the node IS your machine     works as-is
+#   Docker Desktop, older VM-based Kubernetes             use /run/desktop/mnt/host/c/projects/...
+#   kind (incl. current Docker Desktop Kubernetes)        needs extraMounts — see below
+#   minikube                                              needs `minikube mount` — see below
+#
+# Check which you have with `kubectl get nodes`. A node named *-control-plane
+# means the cluster is kind-based, and the node is a container with no mapping
+# to your drive. Verified on this repo's dev machine: every host-path
+# convention fails there — C:/projects/..., /run/desktop/mnt/host/c/...,
+# /host_mnt/c/..., /c/..., and /mnt/c/... all give
+#   MountVolume.SetUp failed ... hostPath type check failed: <path> is not a directory
+#
+# --- Fix A: kind with extraMounts (keeps the live repo loop) ---------------
+# Only possible for a kind cluster you create yourself; Docker Desktop's
+# managed cluster exposes no extraMounts setting.
+#
+#   # kind-cluster.yaml
+#   kind: Cluster
+#   apiVersion: kind.x-k8s.io/v1alpha4
+#   nodes:
+#     - role: control-plane
+#       extraMounts:
+#         - hostPath: C:/projects/extension-shell/extensions/dist
+#           containerPath: /repo/extensions/dist
+#           readOnly: true
+#
+#   kind create cluster --config kind-cluster.yaml
+#
+# then change the path below to /repo/extensions/dist. Edits on your machine
+# appear in the pod immediately — this is the closest thing to a true live loop.
+#
+# --- Fix B: copy in (works on any kind cluster, including Docker Desktop) ---
+# Loses the live loop: re-copy after each rebuild.
+#
+#   node scripts/build-all.mjs                                   # in extensions/
+#   docker cp extensions/dist <node>:/var/local/shell-extensions
+#
+# then set the path below to /var/local/shell-extensions. Use /var/local/...
+# rather than /tmp: /var is a Docker volume in kind nodes, so it survives node
+# restarts.
+#
+# --- Fix C: minikube -------------------------------------------------------
+#   minikube mount C:/projects/extension-shell/extensions/dist:/mnt/extensions
+# (leave it running) then set the path below to /mnt/extensions.
+# ===========================================================================
+
+# hostPath is per-node, so a second replica can schedule onto a node without
+# the path and fail. One replica is also plenty for a dev loop.
+replicaCount: 1
+
+image:
+  repository: shell
+  # The chart defaults the tag to .Chart.AppVersion (0.1.0), but a local
+  # `docker build -f shell/Dockerfile -t shell .` produces shell:latest.
+  tag: latest
+  # Never: fail fast if the image is missing from the node rather than
+  # attempting a registry pull that cannot succeed for a locally built image.
+  # On kind, load it first: docker save shell:latest | docker exec -i <node> ctr -n k8s.io images import -
+  pullPolicy: Never
+
+extensions:
+  enabled: true
+  volume:
+    hostPath:
+      # This repo's assembled dist. See the notes above if your cluster's node
+      # cannot reach this path — that is the common case on kind.
+      path: C:/projects/extension-shell/extensions/dist
+      # Directory, not DirectoryOrCreate: a path the node cannot see should
+      # fail the pod loudly rather than create an empty directory and leave the
+      # shell quietly serving zero extensions, which looks identical to a
+      # build bug.
+      type: Directory

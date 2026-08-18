@@ -27,6 +27,23 @@ ingress:
   #     hosts:
   #       - shell.local
 
+# Optional: mount prebuilt extension assets instead of baking them into the
+# image with Dockerfile.extensions. The volume MUST contain an assembled
+# extensions dist — registry.json plus one folder per extension — exactly what
+# `node scripts/build-all.mjs` writes to extensions/dist/.
+#
+# Mounted over /app/wwwroot/extensions, so the shell serves it with no extra
+# configuration. Use the plain shell image in this mode: mounting shadows any
+# extensions baked into a layered (shell-ext) image.
+extensions:
+  enabled: false
+  # Raw volume spec, passed through verbatim. Any volume type works.
+  volume: {}
+  #   persistentVolumeClaim:
+  #     claimName: shell-extensions
+  # Optional subdirectory within the volume that holds the dist.
+  subPath: ""
+
 resources:
   requests:
     cpu: 100m
@@ -51,6 +68,11 @@ env: []
 #     value: Production
 
 podAnnotations: {}
+
+podSecurityContext: {}
+# podSecurityContext:
+#   fsGroup: 1654        # so the `app` user can read a root-owned volume
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

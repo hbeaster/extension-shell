@@ -1,3 +1,6 @@
+{{- if and .Values.extensions.enabled (not .Values.extensions.volume) }}
+{{- fail "extensions.enabled is true but extensions.volume is empty — supply a volume spec" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,6 +23,10 @@ spec:
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
@@ -48,6 +55,22 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.extensions.enabled }}
+          volumeMounts:
+            # Mounted over the image's own static-asset path, so the existing
+            # wwwroot static-file middleware serves it with no configuration.
+            - name: extensions
+              mountPath: /app/wwwroot/extensions
+              readOnly: true
+              {{- with .Values.extensions.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+          {{- end }}
+      {{- if .Values.extensions.enabled }}
+      volumes:
+        - name: extensions
+          {{- toYaml .Values.extensions.volume | nindent 10 }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

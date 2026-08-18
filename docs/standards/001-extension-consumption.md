@@ -1,16 +1,17 @@
 # STD 001 — Extension Consumption by the Shell
 
 Status: Active
-Version: 1.2.0
-Date: 2026-08-10
-Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md)
+Version: 1.3.0
+Date: 2026-08-13
+Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md)
 
 ## 1. Purpose and scope
 
 This standard defines how the shell discovers, serves, presents, loads, and tears down
 extensions. It covers the registry contract, the backend serving model, the sidebar and
 routing integration, the host-view lifecycle, the context attributes the shell writes to
-a mounted extension, and the deployment layering.
+a mounted extension, and the two supported delivery modes (layered image and mounted
+volume).
 
 It does not cover how extensions themselves are built or how they communicate with the
 shell — that is [STD 002](./002-extension-authoring-and-communication.md). The two
@@ -56,9 +57,10 @@ all capitals, as shown here.
 - **CONSUMPTION-01** — The registry and all extension assets MUST be served as static files under
   `/extensions/`. No API controller or other backend code MUST be involved in extension
   discovery or delivery.
-- **CONSUMPTION-02** — In production, extension assets MUST be served from `wwwroot/extensions`
-  baked into the container image. The shell image itself MUST NOT contain extensions;
-  they are layered on (see CONSUMPTION-15).
+- **CONSUMPTION-02** — In production, extension assets MUST be served from `wwwroot/extensions`.
+  The path is fixed; the source MAY be either assets baked into the image or a volume
+  mounted over that path (see CONSUMPTION-15 and CONSUMPTION-19). The shell image itself
+  MUST NOT contain extensions in either mode.
 - **CONSUMPTION-03** — For local development, the backend MAY map `/extensions` to an external
   directory via the `Extensions:RootPath` configuration key. This key MUST only be set in
   Development configuration (`appsettings.Development.json`), and the application MUST
@@ -123,11 +125,27 @@ all capitals, as shown here.
 
 ### 5.6 Deployment
 
-- **CONSUMPTION-15** — Extensions MUST be delivered by layering built assets onto the unmodified
-  shell image (`Dockerfile.extensions` builds each extension independently, assembles
-  `extensions/dist/`, and copies it to `wwwroot/extensions/`). Shipping extensions MUST NOT require rebuilding the shell image
-  or changing the Helm chart beyond pointing `image.repository`/`image.tag` at the
-  layered image.
+- **CONSUMPTION-15** — Extensions MUST be delivered by one of two modes, and shipping them
+  MUST NOT require rebuilding the shell image in either:
+  - **Layered image (default)** — built assets are layered onto the unmodified shell image
+    (`Dockerfile.extensions` builds each extension independently, assembles
+    `extensions/dist/`, and copies it to `wwwroot/extensions/`). This MUST NOT require
+    changing the Helm chart beyond pointing `image.repository`/`image.tag` at the layered
+    image.
+  - **Mounted volume** — an assembled dist is mounted over `wwwroot/extensions` in the pod,
+    per CONSUMPTION-19.
+
+  The two modes MUST NOT be combined: a volume mounted over `wwwroot/extensions` shadows
+  assets baked into a layered image, making them unreachable with no diagnostic. Mount mode
+  MUST use the plain shell image.
+- **CONSUMPTION-19** — A mounted extension volume MUST contain an assembled dist —
+  `registry.json` plus one folder per extension, as produced by
+  `extensions/scripts/assemble.mjs` — mounted read-only. The shell MUST serve it with no
+  additional configuration: the mount path is the shell's existing static-asset path, and
+  `Extensions:RootPath` MUST NOT be used for this purpose (it remains Development-only per
+  CONSUMPTION-03). An absent, empty, or malformed volume MUST degrade to zero extensions
+  per CONSUMPTION-07, never a startup failure. Assembling or merging a registry inside the
+  cluster MUST NOT be required; the registry is a build-time artifact.
 - **CONSUMPTION-16** — Widening the shell/extension contract (new events, payloads, props, shared
   services, theming, a shell-to-extension channel) REQUIRES a new accepted ADR before any
   implementation, per ADR 0006.
@@ -153,6 +171,15 @@ The requirements above are implemented and tested here:
   `shell/frontend/src/components/AppSidebar.vue` (the theme control, reachable from an
   extension route); behavior specified in
   `shell/frontend/src/stores/__tests__/shellContext.spec.ts` and the host-view tests.
+- Mounted delivery: `helm/shell/values.yaml` (the opt-in `extensions` block and the
+  `podSecurityContext` passthrough a root-owned volume needs),
+  `helm/shell/templates/deployment.yaml` (read-only `volumeMounts` entry at
+  `/app/wwwroot/extensions`, verbatim `volumes` passthrough, and the fail-fast guard for
+  `enabled` without a volume), `helm/shell/templates/NOTES.txt` (the shadowing warning),
+  `helm/shell/examples/extensions-pvc.yaml` (example claim and populate recipe),
+  `helm/shell/examples/values-dev-hostpath.yaml` (hostPath mount for a local cluster —
+  a development convenience distinct from CONSUMPTION-03, which governs running the
+  backend directly rather than in a pod).
 - Deployment: `Dockerfile.extensions`; runtime flow diagrams in
   [architecture snapshot 002](../architecture/002-extension-system.md); build and
   packaging flow in
@@ -172,8 +199,11 @@ A shell change touching the extension path conforms to this standard when:
 - [ ] Context attributes are set before insertion and updated in place, and the shell
       neither calls into the element nor reads state back off it
       (CONSUMPTION-17, CONSUMPTION-18).
-- [ ] The plain shell image still works with zero extensions, and extensions still ship
-      as a layered image (CONSUMPTION-15).
+- [ ] The plain shell image still works with zero extensions, and extensions ship either
+      as a layered image or as a mounted volume, never both at once (CONSUMPTION-15).
+- [ ] A mounted volume carries an assembled dist, is read-only, needs no shell
+      configuration, and degrades to zero extensions when absent or malformed
+      (CONSUMPTION-19).
 - [ ] Any contract widening has an accepted ADR (CONSUMPTION-16).
 
 ## 8. References
@@ -181,9 +211,11 @@ A shell change touching the extension path conforms to this standard when:
 - [ADR 0006 — Web-component extension system with a static registry](../adr/0006-web-component-extension-system.md)
 - [ADR 0007 — Independent extension builds](../adr/0007-independent-extension-builds.md)
 - [ADR 0008 — Bidirectional shell/extension communication via context attributes](../adr/0008-bidirectional-shell-extension-communication.md)
+- [ADR 0009 — Mounted extension volumes as a second delivery mode](../adr/0009-mounted-extension-volumes.md)
 - [ADR 0003 — Single-container serving model](../adr/0003-single-container-serving.md)
 - [Architecture 002 — Extension System](../architecture/002-extension-system.md)
 - [Architecture 003 — Independent Extension Builds](../architecture/003-independent-extension-builds.md)
+- [Architecture 006 — Mounted Extension Delivery](../architecture/006-mounted-extension-delivery.md)
 - [STD 002 — Extension Authoring and Shell Communication](./002-extension-authoring-and-communication.md)
 - [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)
 
@@ -191,6 +223,7 @@ A shell change touching the extension path conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-08-13 | Mounted extension volumes as a second delivery mode per ADR 0009: CONSUMPTION-02 now fixes the serving *path* while allowing either source; CONSUMPTION-15 rewritten to name two mutually exclusive modes; new CONSUMPTION-19 specifies the mounted volume's shape and failure behaviour. CONSUMPTION-03 unchanged — `Extensions:RootPath` stays Development-only. |
 | 1.2.0 | 2026-08-10 | Bidirectional communication per ADR 0008: context attributes added (new §5.5, CONSUMPTION-17, CONSUMPTION-18); CONSUMPTION-11 and CONSUMPTION-14 rewritten; Deployment renumbered to §5.6. Corrected CONSUMPTION-02's cross-reference from CONSUMPTION-13 to CONSUMPTION-15. |
 | 1.1.0 | 2026-08-06 | CONSUMPTION-15 wording updated for independent per-extension builds (ADR 0007); references to ADR 0007 and architecture 003. |
 | 1.0.0 | 2026-08-06 | Initial standard, codifying ADR 0006 as implemented. |

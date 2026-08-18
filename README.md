@@ -62,6 +62,56 @@ helm install shell helm/shell --set image.repository=<your-registry>/shell --set
 
 See `helm/shell/values.yaml` for replicas, resources, ingress, and probe settings.
 
+### Extension delivery
+
+Two supported modes (ADR 0009). **Layered image** is the default — build `shell-ext` with
+`Dockerfile.extensions` and point `image.repository`/`image.tag` at it.
+
+**Mounted volume** ships extensions independently of the shell image. Publish the assembled
+dist — `registry.json` plus one folder per extension, exactly what `node scripts/build-all.mjs`
+writes to `extensions/dist/` — to a volume, then:
+
+```bash
+kubectl apply -f helm/shell/examples/extensions-pvc.yaml
+helm install shell helm/shell \
+  --set extensions.enabled=true \
+  --set extensions.volume.persistentVolumeClaim.claimName=shell-extensions
+```
+
+`helm/shell/examples/extensions-pvc.yaml` is a ready-to-adapt claim with a populate-job
+recipe. It uses `ReadWriteMany` deliberately: the chart runs 2 replicas by default, so
+`ReadWriteOnce` would leave pods on other nodes stuck in `ContainerCreating`.
+
+#### Local development (hostPath)
+
+For a local single-node cluster, `helm/shell/examples/values-dev-hostpath.yaml` mounts
+extensions from the node instead, so rebuilding is the whole loop — files are read per
+request, with no pod restart:
+
+```bash
+docker build -f shell/Dockerfile -t shell .        # once
+helm install shell helm/shell -f helm/shell/examples/values-dev-hostpath.yaml
+```
+
+The default path is this repo's own `extensions/dist`. hostPath reads the *node's*
+filesystem, not your workstation's, so that value mounts as-is only where the node can see
+it — plain Linux/k3s, or a kind cluster created with `extraMounts`. Check `kubectl get
+nodes`: a node named `*-control-plane` means kind (including current Docker Desktop
+Kubernetes), whose node is a container with no view of your drive; there you either create
+your own kind cluster with `extraMounts` to keep the live loop, or copy the dist in with
+`docker cp extensions/dist <node>:/var/local/shell-extensions` and re-copy after each
+rebuild. The example file spells out all of these, plus minikube.
+
+> hostPath is for local clusters only — it ties a pod to its node and is commonly blocked by
+> admission policy. Use a PVC anywhere shared.
+
+`extensions.volume` takes a raw volume spec, so any volume type works (PVC, NFS, CSI). It is
+mounted read-only over `/app/wwwroot/extensions` and needs no shell configuration.
+
+> Use the plain `shell` image in this mode: the mount shadows extensions baked into a layered
+> image. A missing or empty volume is not an error — the sidebar simply shows only built-in
+> tools. Check with `kubectl exec deploy/shell -- ls /app/wwwroot/extensions`.
+
 ## Documentation
 
 - `docs/adr/` — Architecture Decision Records
