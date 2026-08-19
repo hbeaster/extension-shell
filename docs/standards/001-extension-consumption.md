@@ -1,7 +1,7 @@
 # STD 001 — Extension Consumption by the Shell
 
 Status: Active
-Version: 2.0.0
+Version: 2.1.0
 Date: 2026-08-18
 Related ADRs: [0003](../adr/0003-single-container-serving.md), [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0009](../adr/0009-mounted-extension-volumes.md), [0010](../adr/0010-image-volume-extension-delivery.md), [0011](../adr/0011-remove-hostpath-extension-delivery.md), [0012](../adr/0012-filesystem-scanned-extension-discovery.md)
 
@@ -19,7 +19,7 @@ standards describe the two sides of the same contract decided in ADR 0006.
 
 ## 2. Audience
 
-Developers working on the shell itself (`shell/`, `Dockerfile.extensions`,
+Developers working on the shell itself (`shell/`, `extensions/Dockerfile.extensions`,
 `helm/shell/`). Extension authors need STD 002; they may read this standard to understand
 what the shell guarantees.
 
@@ -163,7 +163,7 @@ all capitals, as shown here.
 - **CONSUMPTION-15** — Extensions MUST be delivered by one of two modes, and shipping them
   MUST NOT require rebuilding the shell image in either:
   - **Layered image (default)** — built assets are layered onto the unmodified shell image
-    (`Dockerfile.extensions` builds each extension independently, assembles
+    (`extensions/Dockerfile.extensions` builds each extension independently, assembles
     `extensions/dist/`, and copies it to `wwwroot/extensions/`). This MUST NOT require
     changing the Helm chart beyond pointing `image.repository`/`image.tag` at the layered
     image.
@@ -224,11 +224,13 @@ The requirements above are implemented and tested here:
   `/app/wwwroot/extensions`, verbatim `volumes` passthrough, and the fail-fast guard for
   `enabled` without a volume), `helm/shell/templates/NOTES.txt` (the shadowing warning),
   `helm/shell/examples/extensions-pvc.yaml` (example claim and populate recipe),
-  `Dockerfile.extensions-image` and `helm/shell/examples/values-dev-imagevolume.yaml`
+  `extensions/Dockerfile.extensions-image` and `helm/shell/examples/values-dev-imagevolume.yaml`
   (OCI image volume mount — a development convenience, and a shared-cluster option via
   a registry, distinct from CONSUMPTION-03, which governs running the backend directly
   rather than in a pod).
-- Deployment: `Dockerfile.extensions`; runtime flow diagrams in
+- Deployment: `extensions/Dockerfile.extensions` and
+  `extensions/Dockerfile.extensions-image`, both building with `extensions/` as their
+  context and sharing `extensions/.dockerignore`; runtime flow diagrams in
   [architecture snapshot 002](../architecture/002-extension-system.md); build and
   packaging flow in
   [architecture snapshot 003](../architecture/003-independent-extension-builds.md).
@@ -279,6 +281,7 @@ A shell change touching the extension path conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.1.0 | 2026-08-18 | Both extension Dockerfiles moved from the repo root into `extensions/` and now build with `extensions/` as their context, under a new `extensions/.dockerignore`. Path citations in §2, CONSUMPTION-15, and §6 updated. No normative change. |
 | 2.0.0 | 2026-08-18 | **Breaking.** The registry is removed per ADR 0012: the extensions root's contents are the configuration, and discovery is `GET /api/extensions`, scanned per request. §4 drops **Registry**, renames **Manifest entry** to **Extension descriptor**, and adds **Extensions root**, **Extension catalog**, and **Extension manifest**. CONSUMPTION-01 now separates static asset delivery from endpoint-based discovery; -02 requires one shared root resolution; -03 extends `Extensions:RootPath` to the scan; §5.2 rewritten (-05 endpoint call, -06 per-request scan and per-folder degradation, -07 re-justified content-type check, -08 re-justified api.ts split); new -20 fixes the descriptor shape and makes `discovery`/`services` non-gating; -09 uses `displayName`; -12 adds the tag-registration failure; -15 and -19 drop the registry file and warn that stale folders are now served. |
 | 1.4.0 | 2026-08-17 | §6 implementation pointers updated per ADR 0010/0011: the hostPath example is removed (unreliable on kind and Docker Desktop Kubernetes, no filesystem access from the node) and replaced by an OCI image volume example (`Dockerfile.extensions-image`, `values-dev-imagevolume.yaml`). No normative change — CONSUMPTION-15 and CONSUMPTION-19 remain volume-type-agnostic. |
 | 1.3.0 | 2026-08-13 | Mounted extension volumes as a second delivery mode per ADR 0009: CONSUMPTION-02 now fixes the serving *path* while allowing either source; CONSUMPTION-15 rewritten to name two mutually exclusive modes; new CONSUMPTION-19 specifies the mounted volume's shape and failure behaviour. CONSUMPTION-03 unchanged — `Extensions:RootPath` stays Development-only. |

@@ -6,11 +6,12 @@
 # kubelet only ever unpacks its filesystem into a read-only volume mount, so
 # there is no base runtime and no ENTRYPOINT.
 #
-#   docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+# Build context is this folder. From the repo root:
+#   docker build -f extensions/Dockerfile.extensions-image -t shell-extensions:latest extensions/
 
 FROM node:24-alpine AS extensions-build
 WORKDIR /src
-COPY extensions/ ./
+COPY . ./
 RUN node scripts/build-all.mjs
 
 FROM scratch AS final

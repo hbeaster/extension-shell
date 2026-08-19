@@ -1,15 +1,15 @@
 # Local development: serve extensions from a standalone OCI image mounted via
 # Kubernetes' `image` volume type (GA in 1.36; beta-and-on-by-default from
 # 1.35 — check `kubectl version` if unmounts fail with a validation error).
-# See ADR 0010 and Dockerfile.extensions-image.
+# See ADR 0010 and extensions/Dockerfile.extensions-image.
 #
-#   docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+#   docker build -f extensions/Dockerfile.extensions-image -t shell-extensions:latest extensions/
 #   helm install shell helm/shell -f helm/shell/examples/values-dev-imagevolume.yaml
 #
-# Unlike hostPath (values-dev-hostpath.yaml), this never touches the node's
-# filesystem, so it sidesteps the "node can't see the Windows drive" failure
-# that hits hostPath on Docker Desktop / kind. It reuses the same image-load
-# mechanism this chart already needs for the `shell` image itself.
+# Unlike the hostPath example this replaced (removed in ADR 0011), it never
+# touches the node's filesystem, so it sidesteps the "node can't see the Windows
+# drive" failure that hits hostPath on Docker Desktop / kind. It reuses the same
+# image-load mechanism this chart already needs for the `shell` image itself.
 #
 # No live-edit loop: after `node scripts/build-all.mjs`, rebuild AND reload
 # the image (see below) — the volume is a snapshot of whatever was loaded,

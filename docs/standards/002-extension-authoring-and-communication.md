@@ -1,7 +1,7 @@
 # STD 002 — Extension Authoring and Shell Communication
 
 Status: Active
-Version: 4.0.0
+Version: 4.1.0
 Date: 2026-08-18
 Related ADRs: [0006](../adr/0006-web-component-extension-system.md), [0007](../adr/0007-independent-extension-builds.md), [0008](../adr/0008-bidirectional-shell-extension-communication.md), [0012](../adr/0012-filesystem-scanned-extension-discovery.md)
 
@@ -61,7 +61,7 @@ all capitals, as shown here.
 - **EXT-03** — The extension MUST build in isolation: `npm ci && npm run build` run
   inside the folder on a clean checkout MUST succeed and produce `dist/extension.js`
   without referencing anything outside the folder — no shared configs, no root install, no
-  sibling extensions. (Shell tooling and `Dockerfile.extensions` discover extension folders
+  sibling extensions. (Shell tooling and `extensions/Dockerfile.extensions` discover folders
   by the presence of a `bc-extension` section; there is no registration step anywhere.)
 
 ### 5.2 Manifest
@@ -303,6 +303,7 @@ A new or changed extension conforms to this standard when:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.1.0 | 2026-08-18 | Both extension Dockerfiles moved from the repo root into `extensions/`; EXT-03's path citation updated. No normative change. |
 | 4.0.0 | 2026-08-18 | **Breaking.** Per ADR 0012, `extension.json` is deleted and the manifest becomes the `bc-extension` section of the extension's `package.json`. §4 redefines **Manifest** and **Assembler**; EXT-02 lists the new folder contents; EXT-03 and EXT-09 name `dist/extension.js`; §5.2 rewritten — EXT-04 is the `bc-extension` object with `name`/`version` explicitly excluded, EXT-05 makes `id` the folder name rather than a field, EXT-06 ties `tag` to what the bundle registers, EXT-07 drops id uniqueness, EXT-08 becomes `displayName` with a fallback. New EXT-27 (`type`, only `WebComponent` is hostable), EXT-28 (`discovery`/`services` carried but not enforced), EXT-29 (`module`/`icon` are plain file names with defaults). EXT-21 now names `/api/extensions`. |
 | 3.0.0 | 2026-08-10 | Bidirectional communication per ADR 0008: shell → extension context attributes added (new §5.6, EXT-23…EXT-26); EXT-15, EXT-16, EXT-17 and EXT-19 rewritten; EXT-18 scoped to the outbound vocabulary; EXT-20 updated; Independence renumbered to §5.7. |
 | 2.0.0 | 2026-08-06 | Independent builds per ADR 0007: standalone packages with own lockfiles (EXT-01…EXT-03 rewritten), packaging-time uniqueness (EXT-07), inter-extension awareness banned (new EXT-21, EXT-22). |

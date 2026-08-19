@@ -16,7 +16,8 @@ Single-service web app: Vue 3 SPA + ASP.NET Core (.NET 10) API, served together 
 | `docs/standards/` | Normative standards (RFC 2119 style, numbered): 001 extension consumption, 002 extension authoring & communication |
 | `plans/` | Working plans for larger efforts |
 | `shell/Dockerfile` | Multi-stage build: Vue dist → .NET publish → aspnet runtime (build context is the repo root) |
-| `Dockerfile.extensions` | Layers built extensions onto the shell image (`FROM shell:latest`, copies `extensions/dist/` → `wwwroot/extensions/`) |
+| `extensions/Dockerfile.extensions` | Layers built extensions onto the shell image (`FROM shell:latest`, copies `extensions/dist/` → `wwwroot/extensions/`). Build context is `extensions/`, with its own `.dockerignore` |
+| `extensions/Dockerfile.extensions-image` | Packages the assembled dist as a standalone OCI image (`FROM scratch`, never run) for the k8s `image` volume type |
 
 ## Commands
 
@@ -43,7 +44,8 @@ Extensions:
 Full stack:
 
 - `docker build -f shell/Dockerfile -t shell .` (repo root) then `docker run -p 8080:8080 shell`
-- `docker build -f Dockerfile.extensions -t shell-ext .` (after building `shell`) — shell + extensions image
+- `docker build -f extensions/Dockerfile.extensions -t shell-ext extensions/` (after building `shell`) — shell + extensions image. Note the context is `extensions/`, not the repo root
+- `docker build -f extensions/Dockerfile.extensions-image -t shell-extensions:latest extensions/` — the dist as a standalone OCI image, for mount mode
 - `helm lint helm/shell` / `helm template helm/shell`
 - `helm template helm/shell --set extensions.enabled=true --set extensions.volume.persistentVolumeClaim.claimName=x` — render the mounted-extension mode
 

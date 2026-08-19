@@ -45,7 +45,7 @@ flowchart TB
     end
 
     subgraph delivery [Delivery — unchanged from snapshot 007]
-        LI[Mode A: Dockerfile.extensions<br/>layered shell-ext image]
+        LI["Mode A: extensions/Dockerfile.extensions<br/>layered shell-ext image"]
         VOL[(Mode B: mounted volume<br/>PVC / OCI image volume / CSI)]
     end
 

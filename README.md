@@ -65,7 +65,13 @@ See `helm/shell/values.yaml` for replicas, resources, ingress, and probe setting
 ### Extension delivery
 
 Three supported modes (ADR 0009, ADR 0010). **Layered image** is the default — build
-`shell-ext` with `Dockerfile.extensions` and point `image.repository`/`image.tag` at it.
+`shell-ext` with `extensions/Dockerfile.extensions` and point `image.repository`/`image.tag`
+at it. Both extension Dockerfiles build with `extensions/` as their context, not the repo
+root:
+
+```bash
+docker build -f extensions/Dockerfile.extensions -t shell-ext extensions/
+```
 
 **Mounted volume (PVC)** ships extensions independently of the shell image. Publish the
 assembled dist — one folder per extension holding `package.json`, `extension.js`, and
@@ -87,7 +93,7 @@ recipe. It uses `ReadWriteMany` deliberately: the chart runs 2 replicas by defau
 it with Kubernetes' `image` volume type (GA in 1.36) — no external storage to provision:
 
 ```bash
-docker build -f Dockerfile.extensions-image -t shell-extensions:latest .
+docker build -f extensions/Dockerfile.extensions-image -t shell-extensions:latest extensions/
 helm install shell helm/shell -f helm/shell/examples/values-dev-imagevolume.yaml
 ```
 

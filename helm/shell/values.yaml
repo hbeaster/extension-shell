@@ -28,7 +28,7 @@ ingress:
   #       - shell.local
 
 # Optional: mount prebuilt extension assets instead of baking them into the
-# image with Dockerfile.extensions. The volume MUST contain an assembled
+# image with extensions/Dockerfile.extensions. The volume MUST contain an assembled
 # extensions dist — one folder per extension holding package.json, extension.js
 # and icon.svg — exactly what `node scripts/build-all.mjs` writes to
 # extensions/dist/. There is no index or registry file; the folders themselves

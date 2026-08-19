@@ -38,6 +38,7 @@ extensions go missing. Replacing the volume needs no restart — the endpoint
 rescans the directory on every call.
 {{- else }}
 
-Extensions, if any, come from the image itself (see Dockerfile.extensions). To
-mount them from a volume instead, set extensions.enabled and extensions.volume.
+Extensions, if any, come from the image itself (see
+extensions/Dockerfile.extensions). To mount them from a volume instead, set
+extensions.enabled and extensions.volume.
 {{- end }}

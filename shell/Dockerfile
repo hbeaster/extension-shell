@@ -1,6 +1,7 @@
 # Builds the shell image. The build context is the repository root, not this
-# folder, so that one .dockerignore serves both this and Dockerfile.extensions:
+# folder, because the build spans shell/frontend and shell/backend:
 #   docker build -f shell/Dockerfile -t shell .
+# The extension images build from extensions/ with their own .dockerignore.
 
 # Stage 1: build the Vue SPA
 FROM node:24-alpine AS frontend-build

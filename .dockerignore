@@ -8,7 +8,9 @@ shell/frontend/dist/
 shell/frontend/coverage/
 shell/frontend/.eslintcache
 
-# Extensions
+# Extensions. The shell image does not use these, but the context is the repo
+# root, so excluding them keeps the context transfer small. The extension
+# images build from extensions/ and have their own .dockerignore.
 extensions/node_modules/
 extensions/*/node_modules/
 extensions/dist/

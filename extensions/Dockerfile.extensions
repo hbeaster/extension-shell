@@ -1,6 +1,7 @@
 # Layers built extensions onto the shell image.
-# Build the shell image first, then:
-#   docker build -f Dockerfile.extensions -t shell-ext .
+# Build context is this folder, so the build sees only the extensions.
+# Build the shell image first, then, from the repo root:
+#   docker build -f extensions/Dockerfile.extensions -t shell-ext extensions/
 # Override the base with --build-arg SHELL_IMAGE=<image:tag> if needed.
 ARG SHELL_IMAGE=shell:latest
 
@@ -12,7 +13,7 @@ ARG SHELL_IMAGE=shell:latest
 # (Accepted trade-off: dependency layers are not cached across builds.)
 FROM node:24-alpine AS extensions-build
 WORKDIR /src
-COPY extensions/ ./
+COPY . ./
 RUN node scripts/build-all.mjs
 
 # Final: shell image plus extension static assets.

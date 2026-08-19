@@ -1,0 +1,13 @@
+# Context for Dockerfile.extensions and Dockerfile.extensions-image, both of
+# which build from this folder. The repo-root .dockerignore does not apply to
+# a context rooted here, so the build output and installed dependencies have
+# to be excluded again — the image build always rebuilds from source.
+node_modules/
+*/node_modules/
+dist/
+*/dist/
+
+# Not part of any build stage.
+Dockerfile.extensions
+Dockerfile.extensions-image
+.dockerignore
